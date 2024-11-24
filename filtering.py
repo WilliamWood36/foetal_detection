@@ -8,7 +8,7 @@ from scipy.fft import fft, fftfreq
 
 
 
-
+``
 
 def lowPassFilter(order, cutoff, data):
     b, a = signal.butter(order, cutoff, fs=1000.0)
@@ -20,11 +20,6 @@ def highPassFilter(order, cutoff, data):
     b, a = signal.butter(order, cutoff, fs=1000.0, btype="highpass")
     z = signal.lfilter(b, a, data)
     return z
-
-
-
-
-
 
 
 
@@ -44,7 +39,7 @@ non_filtered_data = data
 for index,data_name in enumerate(data_titles):
     z1 = highPassFilter(3, 20, read_data[data_name])
     z = lowPassFilter(3, 30, z1)
-    data[index] = read_data[data_name]
+    data[index] = z
     
     
     
