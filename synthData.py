@@ -31,10 +31,10 @@ def reshape_date(data,num_channels):
 
 
 # Path to the binary files
-foetal_file_path = 'data/sub01_snr00dB_l1_c0_fecg1.dat'
-foetal_qrs_path = 'data/sub01_snr00dB_l1_c0_fecg1.qrs'
-maternal_file_path = 'data/sub01_snr00dB_l1_c0_mecg.dat'
-noise_file_path = 'data/sub01_snr00dB_l1_c0_noise1.dat'
+foetal_file_path = 'data/sub01/snr00dB/sub01_snr00dB_l1_c0_fecg1.dat'
+foetal_qrs_path = 'data/sub01/snr00dB/sub01_snr00dB_l1_c0_fecg1.qrs'
+maternal_file_path = 'data/sub01/snr00dB/sub01_snr00dB_l1_c0_mecg.dat'
+noise_file_path = 'data/sub01/snr00dB/sub01_snr00dB_l1_c0_noise1.dat'
 
 
 # Define the number of channels (32 ECG + 2 reference)

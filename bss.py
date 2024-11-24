@@ -16,7 +16,7 @@ def function_pca(data, channels,components):
 
     # Step 1: Standardize the data (important for PCA)
     scaler = StandardScaler()
-    data_scaled = scaler.fit_transform(data)  # Standardizing each column (channel)
+    data_scaled = scaler.fit_transform(data.T)  # Standardizing each column (channel)
 
     # Step 2: Apply PCA
     pca = PCA(n_components=components)  # You can choose the number of components based on your needs
