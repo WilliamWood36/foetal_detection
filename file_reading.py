@@ -93,7 +93,6 @@ def build_waveforms(files):
             
             data_to_add = reshape_date(np.fromfile(file, dtype=np.int16),34)[:-2]
             if "noise1"  in file:
-                print(f"    File: {file}")
                 waveform1 += data_to_add
             elif "noise2" in file:
                 waveform2 += data_to_add

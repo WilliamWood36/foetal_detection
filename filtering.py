@@ -8,7 +8,7 @@ from scipy.fft import fft, fftfreq
 
 
 
-``
+
 
 def lowPassFilter(order, cutoff, data):
     b, a = signal.butter(order, cutoff, fs=1000.0)
