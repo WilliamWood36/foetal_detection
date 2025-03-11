@@ -25,7 +25,33 @@ def reshape_date(data,num_channels):
     channels = np.array([np.array(reshaped_data[:, i]) for i in range(num_channels)])
     return channels
 
+def dataset_builder(base_directory, signal_indexes, seperate=False):
+    """
+    Process all grouped files based on the folder layout.
 
+    Args:
+        base_directory (str): The base directory containing the folder layout.
+    """
+    grouped_files = group_files_by_record(base_directory)
+    if not grouped_files:
+        print("No valid files found.")
+        return
+
+    waves = ["wave1","wave2"]
+
+    dataset = []
+    total_maternal_waves = 0
+    for record_name, files in grouped_files.items():
+        print(f"Processing Record: {record_name}")
+
+
+        waveforms = build_waveforms(files)
+        
+        for w in waves:
+            print("adding wave: ",w)
+            dataset.append((waveforms["wave1"][signal_indexes], waveforms["foetal_qrs"]))
+    return dataset
+            
 
 
 def group_files_by_record(base_directory, data_extension=".dat", annotation_extension=".qrs", header_extension=".hea"):

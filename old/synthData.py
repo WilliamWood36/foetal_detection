@@ -66,7 +66,7 @@ fig, axs = plt.subplots(num_components, 1)
 for index in range(0,num_components):
 # Step 3: Visualize the first two principal components (after PCA)
     #plt.plot(pca_result[:, 0][:1000], label='Principal Component 1')
-    axs[index].plot(pca_result[:,index][:1000], label='Principal Component ')
+    axs[index].plot(pca_result[:,index][:4000], label='Principal Component ')
 
     axs[index].set_title('PCA - First Two Principal Components')
     axs[index].set_xlabel('Samples')

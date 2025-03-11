@@ -3,11 +3,12 @@
 Created on Sun Nov 24 14:21:15 2024
 
 @author: bigey
+@version: Python 3.12.4
 """
 
 import numpy as np
 
-from file_reading import group_files_by_record, build_waveforms
+from file_reading import group_files_by_record, build_waveforms, dataset_builder
 from plotting_test import basic_plot,plot_n_components
 from bss import function_pca
 from detectors.pca_window import highest_point
@@ -79,6 +80,7 @@ def check_pairs(estimated, actual):
             print(a," actual: ",b)
     return mle
      
+
     
 
 def process_files_in_layout(base_directory,detector_function):
@@ -108,13 +110,11 @@ def process_files_in_layout(base_directory,detector_function):
         
         for w in waves:
             print(w)
-            total_maternal_waves += waveforms["maternal_qrs"].size
+            total_maternal_waves += waveforms["foetal_qrs"].size
             
             eval = np.array(detector_function(waveforms[w]))
             
-
-            
-            mle, missing, extra = average_distance_with_filter(eval,waveforms["maternal_qrs"],6.0)
+            mle, missing, extra = average_distance_with_filter(waveforms["foetal_qrs"],eval,6.0)
             
             net_mle.append(mle)
             net_missing.append(missing)
@@ -124,10 +124,10 @@ def process_files_in_layout(base_directory,detector_function):
 
 
     print("*" * 35)
-    print(f"MLE of : {np.mean(net_mle)}")
-    print("Missed Waves: ")
-    print(f"Missed Waves: {np.sum(net_missing)} \nExtra Waves: {np.sum(net_extra)}")
-    print(f"Over: {total_maternal_waves} total beats")
+    #print(f"MLE      : {np.mean(net_mle)}")
+    print(f"Accuracy : {round(((total_maternal_waves-np.sum(net_extra)-np.sum(net_missing))/total_maternal_waves)*100,2)}%")
+    print(f"Missed   : {np.sum(net_missing)} \nExtra    : {np.sum(net_extra)}")
+    print(f"Over     : {total_maternal_waves} total beats")
     print("*" * 35)
 
 
@@ -136,10 +136,10 @@ def process_files_in_layout(base_directory,detector_function):
 
 
 # Example usage
-base_directory_path = "./data"  # Replace with the path to your base folder
-process_files_in_layout(base_directory_path, highest_point)
+base_directory_path = "../data"  # Replace with the path to your base folder
+#process_files_in_layout(base_directory_path, highest_point)
 
-
+print(dataset_builder(base_directory_path, [4,8,16])[0])
 
 
 
