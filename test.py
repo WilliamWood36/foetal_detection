@@ -1,150 +1,122 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import numpy as np
-# Device setup
+from torch.utils.data import DataLoader, TensorDataset, random_split
 
+from file_reading import dataset_builder, preprocess_ecg_data
 
-# CNN Model for ECG QRS Detection
-class ECG_CNN(nn.Module):
-    def __init__(self):
-        super(ECG_CNN, self).__init__()
-        self.conv1 = nn.Conv1d(in_channels=4, out_channels=16, kernel_size=5, stride=1, padding=2)
-        self.relu1 = nn.ReLU()
-        self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2)
-
-        self.conv2 = nn.Conv1d(16, 32, kernel_size=5, stride=1, padding=2)
-        self.relu2 = nn.ReLU()
-        self.pool2 = nn.MaxPool1d(kernel_size=2, stride=2)
-
-        self.conv3 = nn.Conv1d(32, 64, kernel_size=5, stride=1, padding=2)
-        self.relu3 = nn.ReLU()
-        self.pool3 = nn.MaxPool1d(kernel_size=2, stride=2)
-
-        self.flatten = nn.Flatten()
-        self.fc1 = nn.Linear(64 * 250, 128)  # Adjust based on input window size
-        self.relu_fc1 = nn.ReLU()
-        self.fc2 = nn.Linear(128, 1)  # Regression output: position of QRS
+# Define Fetal QRS Detector (Ensure this matches your existing model structure)
+class FetalQRSWindowDetector(nn.Module):
+    def __init__(self, in_channels=4):
+        super(FetalQRSWindowDetector, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels, 16, kernel_size=5, padding=2)
+        self.bn1 = nn.BatchNorm1d(16)
+        self.conv2 = nn.Conv1d(16, 32, kernel_size=5, padding=2)
+        self.bn2 = nn.BatchNorm1d(32)
+        self.fc = nn.Linear(32 * 100, 100)  # Adjust if needed
 
     def forward(self, x):
-        x = self.pool1(self.relu1(self.conv1(x)))
-        x = self.pool2(self.relu2(self.conv2(x)))
-        x = self.pool3(self.relu3(self.conv3(x)))
-        x = self.flatten(x)
-        x = self.relu_fc1(self.fc1(x))
-        x = self.fc2(x)  # Output QRS position
+        x = torch.relu(self.bn1(self.conv1(x)))
+        x = torch.relu(self.bn2(self.conv2(x)))
+        x = x.view(x.size(0), -1)  # Flatten
+        x = torch.sigmoid(self.fc(x))  # Binary classification
         return x
 
+# Load dataset
+def load_data():
+    window_length = 100
+    stride = 50
+    # Simulate a batch of 4-channel windowed data: shape (batch, 4, 100)
+    raw_ecg_data, fqrs = dataset_builder("./data", [2,9,15,28])
+    ecg_data = preprocess_ecg_data(raw_ecg_data,fqrs,window_length,stride)
+    pure_ecg = []
+    bin_labels = []
+    for i in ecg_data:
+        label = np.zeros(window_length)
+        if i[1] != -1:
+            start = max(0, i[1] - 2)
+            end = min(window_length, i[1] + 3)
+            label[start:end] = 1.0
 
+        pure_ecg.append(i[0])
+        bin_labels.append(label)
 
+    pure_ecg = torch.from_numpy(np.array(pure_ecg, dtype=np.float32))
+    bin_labels = torch.from_numpy(np.array(bin_labels, dtype=np.float32))
 
-
-def preprocess_ecg_data(ecg_data, qrs_positions, window_size=2000, stride=500):
-    """
-    Splits ECG data into overlapping windows and assigns QRS positions.
     
-    Args:
-    - ecg_data: (4, 750000) -> 4-channel ECG signals
-    - qrs_positions: List of true QRS positions in the full signal
-    - window_size: Number of samples per window
-    - stride: Step size for sliding window
+    batch_size = 20998
+
+
+    dataset = TensorDataset(pure_ecg, bin_labels)
+    test_size = batch_size // 4  # 25% for testing
+    train_size = batch_size - test_size
+
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    return train_dataset, test_dataset
+
+# Training function
+def train(model, dataloader, criterion, optimizer, device):
+    model.train()
+    total_loss = 0.0
+    for ecg_data, labels in dataloader:
+        ecg_data, labels = ecg_data.to(device), labels.to(device)
+
+        optimizer.zero_grad()
+        outputs = model(ecg_data)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item()
     
-    Returns:
-    - X: Processed ECG segments
-    - y: QRS positions relative to window
-    """
-    num_windows = (ecg_data.shape[1] - window_size) // stride + 1
-    X, y = [], []
-    
-    for i in range(num_windows):
-        start = i * stride
-        end = start + window_size
-        segment = ecg_data[:, start:end]  # Extract window
+    return total_loss / len(dataloader)
 
-        # Find QRS complex within the window
-        qrs_in_window = [q - start for q in qrs_positions if start <= q < end]
+# Testing function
+def test(model, dataloader, criterion, device):
+    model.eval()
+    total_loss = 0.0
+    correct = 0
+    total = 0
 
-        # Label: QRS position or -1 if no QRS found
-        label = qrs_in_window[0] if qrs_in_window else -1
+    with torch.no_grad():
+        for ecg_data, labels in dataloader:
+            ecg_data, labels = ecg_data.to(device), labels.to(device)
+            outputs = model(ecg_data)
+            
+            loss = criterion(outputs, labels)
+            total_loss += loss.item()
 
-        X.append(segment)
-        y.append(label)
-    
-    return np.array(X), np.array(y)
+            predicted = (outputs > 0.5).float()
+            correct += (predicted == labels).sum().item()
+            total += labels.numel()
 
+    accuracy = 100 * correct / total
+    return total_loss / len(dataloader), accuracy
 
+# Main execution
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# Load datasets
+train_dataset, test_dataset = load_data()
 
+# Create DataLoaders
+train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
-import torch.utils.data as data
-
-# Convert to PyTorch Dataset
-class ECGDataset(data.Dataset):
-    def __init__(self, X, y):
-        self.X = torch.tensor(X, dtype=torch.float32)
-        self.y = torch.tensor(y, dtype=torch.float32)
-
-    def __len__(self):
-        return len(self.y)
-
-    def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]
-
-
+# Initialize model, loss, optimizer
+model = FetalQRSWindowDetector(in_channels=4).to(device)
+criterion = nn.BCELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.000001)
 
 # Training loop
-def train(model, dataloader, loss_fn, optimizer, epochs=5):
-    model.train()
-    for epoch in range(epochs):
-        for X_batch, y_batch in dataloader:
-            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+num_epochs = 10
+for epoch in range(num_epochs):
+    train_loss = train(model, train_loader, criterion, optimizer, device)
+    test_loss, accuracy = test(model, test_loader, criterion, device)
 
-            optimizer.zero_grad()
-            predictions = model(X_batch)
-            loss = loss_fn(predictions.squeeze(), y_batch)
-            loss.backward()
-            optimizer.step()
-
-        print(f"Epoch {epoch+1}, Loss: {loss.item():.6f}")
-
-
-
-
-def evaluate(model, dataloader):
-    model.eval()
-    total_loss = 0
-    with torch.no_grad():
-        for X_batch, y_batch in dataloader:
-            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
-            predictions = model(X_batch)
-            total_loss += loss_fn(predictions.squeeze(), y_batch).item()
-    
-    print(f"Test Loss: {total_loss / len(dataloader):.6f}")
-
-
-
-
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# Initialize model
-model = ECG_CNN().to(device)
-
-
-from file_reading import dataset_builder
-
-# Example Usage
-ecg_data = dataset_builder("./data,[]")  # Simulated ECG (4 channels, 750000 samples)
-qrs_positions = [5000, 12000, 18000]  # Example QRS positions
-X, y = preprocess_ecg_data(ecg_data, qrs_positions)
-
-# Create Dataset
-dataset = ECGDataset(X, y)
-train_loader = data.DataLoader(dataset, batch_size=64, shuffle=True)
-
-# Loss function and optimizer
-loss_fn = nn.MSELoss()  # Regression loss
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
-
-train(model, train_loader, loss_fn, optimizer)
-
-evaluate(model, train_loader)
+    print(f"Epoch [{epoch+1}/{num_epochs}] - "
+          f"Train Loss: {train_loss:.4f} - "
+          f"Test Loss: {test_loss:.4f} - "
+          f"Accuracy: {accuracy:.2f}%")
