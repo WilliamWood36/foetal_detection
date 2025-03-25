@@ -1,77 +1,46 @@
 import numpy as np
 
 
-# Example usage
+arr = np.array([
+    [-68, -67, -65, -64, -63, -62, -61, -60, -58, -57, -56, -55,
+     -54, -53, -52, -51, -50, -50, -49, -48, -47, -46, -46, -45,
+     -44, -44, -43, -42, -42, -41, -40, -39, -34, -22, 5, 39,
+     46, 2, -59, -83, -62, -32, -17, -9, -16, -2, -25, 13,
+     -30, 260, 572, 1706, 932, -533, -33, -50, -3, -45, -22, -37,
+     -30, -32, -28, -22, -15, -4, 9, 26, 44, 64, 83, 99,
+     112, 120, 121, 116, 106, 90, 71, 51, 31, 13, -4, -17,
+     -28, -36, -42, -46, -49, -50, -51, -52, -53, -53, -53, -53,
+     -54, -54, -54, -54],
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+    [-73, -73, -73, -72, -72, -72, -71, -71, -70, -70, -70, -69,
+     -69, -69, -68, -68, -68, -67, -67, -67, -66, -66, -66, -65,
+     -65, -65, -64, -64, -64, -63, -63, -61, -56, -40, -2, 51,
+     79, 44, -29, -76, -76, -58, -46, -37, -48, -26, -61, -4,
+     -65, 403, 906, 2123, 849, -972, -68, -97, -13, -76, -38, -61,
+     -47, -51, -44, -35, -24, -9, 10, 32, 56, 82, 106, 127,
+     143, 151, 150, 142, 126, 105, 80, 54, 29, 6, -13, -29,
+     -42, -51, -57, -61, -64, -66, -67, -68, -68, -69, -69, -69,
+     -69, -69, -70, -70],
 
-class FetalQRSWindowDetector(nn.Module):
-    def __init__(self, in_channels=4):
-        super(FetalQRSWindowDetector, self).__init__()
-        # First convolutional block
-        self.conv1 = nn.Conv1d(in_channels, 16, kernel_size=3, stride=1, padding=1)
-        self.bn1 = nn.BatchNorm1d(16)
-        # Second convolutional block
-        self.conv2 = nn.Conv1d(16, 32, kernel_size=3, stride=1, padding=1)
-        self.bn2 = nn.BatchNorm1d(32)
-        # Third convolutional block
-        self.conv3 = nn.Conv1d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.bn3 = nn.BatchNorm1d(64)
-        # Final layer reduces channels to 1 for per-sample predictions
-        self.conv_final = nn.Conv1d(64, 1, kernel_size=1)
+    [22, 23, 23, 24, 25, 25, 26, 27, 27, 28, 29, 29,
+     30, 30, 31, 32, 32, 33, 33, 33, 34, 34, 35, 35,
+     36, 36, 36, 37, 37, 37, 38, 38, 37, 30, 12, -20,
+     -58, -77, -65, -29, 10, 36, 48, 47, 55, 43, 64, 30,
+     68, -227, -572, -732, 82, 722, 55, 78, 18, 53, 28, 40,
+     31, 32, 26, 21, 14, 6, -5, -18, -31, -45, -58, -69,
+     -77, -81, -80, -75, -66, -54, -41, -27, -14, -3, 7, 14,
+     20, 24, 26, 28, 29, 30, 30, 30, 31, 31, 31, 31,
+     31, 31, 31, 31],
 
-    def forward(self, x):
-        """
-        Args:
-            x (Tensor): Input tensor of shape (batch, 4, 100)
-        
-        Returns:
-            Tensor: Per-sample probabilities of shape (batch, 100)
-        """
-        x = F.relu(self.bn1(self.conv1(x)))  # -> (batch, 16, 100)
-        x = F.relu(self.bn2(self.conv2(x)))  # -> (batch, 32, 100)
-        x = F.relu(self.bn3(self.conv3(x)))  # -> (batch, 64, 100)
-        x = self.conv_final(x)               # -> (batch, 1, 100)
-        x = x.squeeze(1)                     # -> (batch, 100)
-        return torch.sigmoid(x)              # probabilities between 0 and 1
+    [50, 43, 37, 31, 25, 19, 13, 7, 2, -4, -9, -15,
+     -20, -25, -30, -35, -39, -44, -48, -52, -56, -60, -64, -67,
+     -70, -73, -75, -78, -80, -81, -82, -81, -75, -49, 9, 79,
+     82, -45, -232, -333, -295, -194, -105, -54, -40, -17, -40, 4,
+     46, 724, 1021, 1925, -178, -1588, -146, -176, 6, -90, -33, -71,
+     -51, -61, -55, -54, -55, -56, -62, -71, -87, -109, -138, -171,
+     -207, -242, -271, -292, -301, -299, -284, -260, -229, -195, -160, -128,
+     -101, -78, -61, -48, -39, -33, -30, -28, -26, -26, -25, -25,
+     -25, -25, -26, -26]
+])
 
-from file_reading import dataset_builder,preprocess_ecg_data
-
-# Example usage:
-if __name__ == '__main__':
-    window_length = 100
-
-    # Simulate a batch of 4-channel windowed data: shape (batch, 4, 100)
-    raw_ecg_data, fqrs = dataset_builder("./data", [2,9,15,28])
-    ecg_data, int_labels= preprocess_ecg_data(raw_ecg_data,fqrs,window_length,50)
-
-   
-    batch_size = ecg_data.shape[0]
-    # Simulate corresponding binary labels for each window
-    # Here we randomly assign a QRS complex to about 50% of the windows
-    bin_labels = torch.zeros(batch_size, window_length)
-    for i in range(batch_size):
-        if torch.rand(1) > 0.5:  # 50% chance that this window has a QRS
-            qrs_idx = torch.randint(0, window_length, (1,)).item()
-            # Optionally mark a few samples around the QRS index:
-            start = max(0, qrs_idx - 2)
-            end = min(window_length, qrs_idx + 3)
-            bin_labels[i, start:end] = 1.0
-
-    # Instantiate and test the model
-    model = FetalQRSWindowDetector(in_channels=4)
-    print(ecg_data.shape)
-
-    ecg_data = torch.tensor(ecg_data, dtype=torch.float32)  # Ensure correct dtype
-
-
-
-    output = model(ecg_data)
-    print("Output shape:", output.shape)  # Expected: (batch_size, 100)
-
-    # Example loss using binary cross-entropy
-    criterion = nn.BCELoss()
-    loss = criterion(output, bin_labels)
-    print("Loss:", loss.item())
+print(arr.shape)

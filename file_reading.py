@@ -5,6 +5,7 @@ Created on Sun Nov 24 18:48:01 2024
 @author: acd21ww
 """
 
+from matplotlib import pyplot as plt
 import numpy as np
 import wfdb
 from pathlib import Path
@@ -54,6 +55,8 @@ def dataset_builder(base_directory, signal_indexes, seperate=False):
             foetalDataset.append(waveforms["foetal_qrs"])
         
         print(np.array(dataset).shape,np.array(foetalDataset[0]).shape)
+    print(f"Raw ECG data shape: {np.array(dataset).shape}")
+    print(f"Foetal QRS shape: {np.array(foetalDataset[0]).shape}")
     return np.array(dataset), np.array(foetalDataset[0])
             
 
@@ -141,48 +144,118 @@ def build_waveforms(files):
             else:
                 maternal_qrs = qrs_data
     return_dict = {
-            "wave1": waveform1,
-            "wave2": waveform2,
+            "wave1": fecg_signal,
+            "wave2": fecg_signal,
             "maternal_qrs": maternal_qrs,
             "foetal_qrs": foetal_qrs
         }
     return return_dict
 
 
-def preprocess_ecg_data(ecg_data, qrs_positions, window_size=2000, stride=500):
+def preprocess_ecg_data(ecg_data, qrs_positions, window_size=200, stride=50):
     """
-    Splits ECG data into overlapping windows and assigns QRS positions.
+    Splits ECG data into windows with each QRS complex centered.
+    For regions with no QRS complex, uses regular stride-based windows.
     
     Args:
-    - ecg_data: (4, 750000) -> 4-channel ECG signals
+    - ecg_data: (4, 75000) -> 4-channel ECG signals
     - qrs_positions: List of true QRS positions in the full signal
     - window_size: Number of samples per window
-    - stride: Step size for sliding window
+    - stride: Step size for sliding window (used for regions without QRS)
     
     Returns:
-    - X: Processed ECG segments
-    - y: QRS positions relative to window
+    - X: List of tuples (ECG segment, QRS position)
     """
-    ecg_data = ecg_data.transpose(1, 0, 2).reshape(4, 75000 * 14)
-    num_windows = (int)((ecg_data.shape[1] - window_size) / (stride))
-    print("windows: ", num_windows)
-    print(num_windows,"  ",  ecg_data.shape)
-    X, y = [], []
+    # Reshape ecg_data if needed
+    if len(ecg_data.shape) > 2:
+        ecg_data = ecg_data.reshape(ecg_data.shape[0], -1)
     
-    for i in range(num_windows):
-        start = i * stride
+    signal_length = ecg_data.shape[1]
+    half_window = window_size // 2
+    X = []
+    
+    # First, create windows centered on each QRS complex
+    for qrs_pos in qrs_positions:
+        # Skip if QRS is too close to the edges
+        if qrs_pos < half_window or qrs_pos >= signal_length - half_window:
+            continue
+        
+        # Create window centered on QRS complex
+        start = qrs_pos - half_window
         end = start + window_size
-        segment = ecg_data[:, start:end]  # Extract window
-        # Find QRS complex within the window
-        qrs_in_window = [q - start for q in qrs_positions if start <= q < end]
-
-        # Label: QRS position or -1 if no QRS found
-        label = qrs_in_window[0] if qrs_in_window else -1
-        X.append((segment,label))
-
-
-
-
-
+        segment = ecg_data[:, start:end]
+        
+        # QRS position relative to window start (should be at half_window)
+        relative_pos = half_window
+        
+        X.append((segment, relative_pos))
+    
+    # Then fill in gaps with regular stride-based windows
+    # Track regions we've already covered with QRS-centered windows
+    covered_regions = []
+    for qrs_pos in qrs_positions:
+        if qrs_pos < half_window or qrs_pos >= signal_length - half_window:
+            continue
+        start = max(0, qrs_pos - half_window)
+        end = min(signal_length, qrs_pos + half_window)
+        covered_regions.append((start, end))
+    
+    # Sort covered regions
+    covered_regions.sort()
+    
+    # Merge overlapping regions
+    if covered_regions:
+        merged_regions = [covered_regions[0]]
+        for current in covered_regions[1:]:
+            prev_start, prev_end = merged_regions[-1]
+            current_start, current_end = current
+            
+            if current_start <= prev_end:
+                # Regions overlap, merge them
+                merged_regions[-1] = (prev_start, max(prev_end, current_end))
+            else:
+                # No overlap, add as new region
+                merged_regions.append(current)
+        
+        covered_regions = merged_regions
+    
+    # Now create windows for uncovered regions
+    current_pos = 0
+    for start_covered, end_covered in covered_regions:
+        # Process region before the current covered region
+        while current_pos + window_size <= start_covered:
+            segment = ecg_data[:, current_pos:current_pos + window_size]
+            # No QRS in this window
+            X.append((segment, -1))
+            current_pos += stride
+        
+        # Skip the covered region
+        current_pos = end_covered
+    
+    # Process any remaining uncovered region at the end
+    while current_pos + window_size <= signal_length:
+        segment = ecg_data[:, current_pos:current_pos + window_size]
+        # Check if there's any QRS in this window (should be none based on our logic)
+        qrs_in_window = [q - current_pos for q in qrs_positions if current_pos <= q < current_pos + window_size]
+        label = -1  # Should be no QRS here
+        X.append((segment, label))
+        current_pos += stride
+    
     return X
+
+        # x = np.arange(100)
+
+        # # Plot the signal
+        # plt.plot(x, segment[0], label="Signal")
+        # print(segment[0]," ", label)
+        # # Plot a dot at the given index
+        # plt.scatter(label, 50, color="red", zorder=5, label=f"Dot at index ")
+
+        # plt.xlabel("Index")
+        # plt.ylabel("Signal Value")
+        # plt.title("Signal with Dot at a Specific Index")
+        # plt.legend()
+        # plt.show()
+
+
 

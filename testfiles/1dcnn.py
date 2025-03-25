@@ -48,5 +48,35 @@ print("Done!")
 
 
 
+
+
+pred = model()
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Create sample data: 100 points (e.g., a sine wave)
+x = np.arange(100)
+signal = np.sin(0.1 * x)
+
+# Specify the index where you want to add a dot
+dot_index = 50  # Change this to your desired x index
+dot_value = signal[dot_index]
+
+# Plot the signal
+plt.plot(x, signal, label="Signal")
+
+# Plot a dot at the given index
+plt.scatter(dot_index, dot_value, color="red", zorder=5, label=f"Dot at index {dot_index}")
+
+plt.xlabel("Index")
+plt.ylabel("Signal Value")
+plt.title("Signal with Dot at a Specific Index")
+plt.legend()
+plt.show()
+
+
+
+
 # Print model architecture
 print(model)
