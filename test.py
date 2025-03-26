@@ -32,24 +32,26 @@ def load_data():
     stride = 50
     # Simulate a batch of 4-channel windowed data: shape (batch, 4, 100)
     raw_ecg_data, fqrs = dataset_builder("./data", [2,9,15,28])
-    ecg_data = preprocess_ecg_data(raw_ecg_data, fqrs, window_length, stride)
+    ecg_data, labels = preprocess_ecg_data(raw_ecg_data, fqrs, window_length, stride)
+    print("lables :",labels.shape," ecg_data:  ", ecg_data.shape)
     pure_ecg = []
     bin_labels = []
-    for i in ecg_data:
+    for index,i in enumerate(ecg_data):
         # Ensure we only take the first 4 channels if more exist
-        segment = i[0][:4] if i[0].shape[0] > 4 else i[0]
-        
+        segment = i
         label = np.zeros(window_length)
-        if i[1] != -1:
-            start = max(0, i[1] - 2)
-            end = min(window_length, i[1] + 3)
+        if labels[index] != -1:
+            start = max(0, labels[index] - 2)
+            end = min(window_length, labels[index] + 3)
             label[start:end] = 1.0
 
         pure_ecg.append(segment)
         bin_labels.append(label)
 
-    pure_ecg = torch.from_numpy(np.array(pure_ecg, dtype=np.float32))
-    bin_labels = torch.from_numpy(np.array(bin_labels, dtype=np.float32))
+    print("lables :", np.array(bin_labels).shape," ecg_data:  ", np.array(pure_ecg).shape)
+
+    pure_ecg = torch.from_numpy(np.array(pure_ecg, dtype=np.float32)).cuda()
+    bin_labels = torch.from_numpy(np.array(bin_labels, dtype=np.float32)).cuda()
 
     # Create the dataset with actual length
     dataset = TensorDataset(pure_ecg, bin_labels)
@@ -68,84 +70,61 @@ def load_data():
 
 # The rest of the code remains the same...
 # Training function
-def train(model, dataloader, criterion, optimizer, device):
+def train(dataloader, model, loss_fn, optimizer):
+    size = len(dataloader.dataset)
+    # Set the model to training mode - important for batch normalization and dropout layers
+    # Unnecessary in this situation but added for best practices
     model.train()
-    total_loss = 0.0
-    for ecg_data, labels in dataloader:
-        ecg_data, labels = ecg_data.to(device), labels.to(device)
+    avg_loss = 0
+    batches = 0
+    for batch, (X, y) in enumerate(dataloader):
+        # Compute prediction and loss
+        pred = model(X)
+        loss = loss_fn(pred, y)
 
-        optimizer.zero_grad()
-        outputs = model(ecg_data)
-        loss = criterion(outputs, labels)
+        # Backpropagation
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad()
+        batches +=1
+        avg_loss += loss.item()
+        if batch % 100 == 0:
+            loss, current = loss.item(), batch * batch_size + len(X)
+            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+    return avg_loss/batches
 
-        total_loss += loss.item()
-    
-    return total_loss / len(dataloader)
-
-# Testing function
-def test(model, dataloader, criterion, device, false_positive_weight=0.5):
-    """
-    Test function with enhanced penalty for false positives.
-    
-    Args:
-    - model: The neural network model
-    - dataloader: Data loader for test set
-    - criterion: Base loss criterion (e.g., BCELoss)
-    - device: Computing device (cuda/cpu)
-    - false_positive_weight: Multiplier for false positive errors
-    
-    Returns:
-    - Average loss
-    - Accuracy
-    """
+def test(dataloader, model, loss_fn):
+    # Set the model to evaluation mode - important for batch normalization and dropout layers
+    # Unnecessary in this situation but added for best practices
     model.eval()
+    size = len(dataloader.dataset)
+    num_batches = len(dataloader)
     total_loss = 0.0
-    correct = 0
-    total = 0
-    false_positives = 0
-    false_negatives = 0
-    
-    with torch.no_grad():
-        for ecg_data, labels in dataloader:
-            ecg_data, labels = ecg_data.to(device), labels.to(device)
-            outputs = model(ecg_data)
-            
-            # Base loss calculation
-            base_loss = criterion(outputs, labels)
-            
-            # Calculate false positive and false negative masks
-            predicted = (outputs > 0.5).float()
-            false_pos_mask = (predicted == 1) & (labels == 0)
-            false_neg_mask = (predicted == 0) & (labels == 1)
-            
-            # Count false positives and false negatives
-            false_positives += false_pos_mask.sum().item()
-            false_negatives += false_neg_mask.sum().item()
-            
-            # Apply additional penalty for false positives
-            false_positive_loss = false_pos_mask.float().mean() * false_positive_weight * base_loss
-            
-            # Combine base loss with false positive penalty
-            total_loss += base_loss.item() + false_positive_loss.item()
-            
-            # Accuracy calculation
-            correct += (predicted == labels).sum().item()
-            total += labels.numel()
-    
-    # Calculate metrics
-    accuracy = 100 * correct / total
-    avg_loss = total_loss / len(dataloader)
-    
-    # Visualize predictions
-    visualize_predictions(model, dataloader, device)
-    
-    # Optional: Print false positive and false negative statistics
-    print(f"False Positives: {false_positives}")
-    print(f"False Negatives: {false_negatives}")
-    
-    return avg_loss, accuracy
+    total_correct = 0
+    total_samples = 0
+
+    for X, y in dataloader:
+        pred = model(X)  # Model outputs 100 values per sample
+        print(X.shape)
+        # Compute loss
+        total_loss += loss_fn(pred, y).item()
+
+        # Convert predictions to binary (1 if feature detected, 0 otherwise)
+        pred_binary = (pred > 0.5).float()  # Thresholding for binary detection
+        print(pred_binary.shape)
+        # Count correctly detected feature positions (overlap with label)
+        correct_preds = (pred_binary * y).sum(dim=1)  # Count overlapping 1s per sample
+        total_correct += correct_preds.sum().item()   # Sum across batch
+        total_samples += y.sum().item()  # Total number of expected feature points
+
+        visualize_predictions(pred_binary[0].cpu().detach().numpy(), X[0][0].cpu().detach().numpy(), y.cpu().detach().numpy()[0])
+
+# Compute metrics
+    average_loss = total_loss / len(dataloader)
+    accuracy = total_correct / total_samples if total_samples > 0 else 0
+
+    print(f"Test Error: \n Accuracy: {(100*accuracy):>0.1f}%, Avg loss: {average_loss:>8f} \n")
+    return average_loss, accuracy
 
 
 # Main execution
@@ -162,7 +141,7 @@ test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 model = FetalQRSWindowDetector(in_channels=4).to(device)
 
 criterion = nn.BCELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.Adam(model.parameters(), lr=0.01)
 
 start_time = time.time()  # Start the timer
 
@@ -171,10 +150,13 @@ start_time = time.time()  # Start the timer
 
 
 # Training loop
-num_epochs = 2
+learning_rate = 1e-3
+batch_size = 64
+num_epochs = 5
+
 for epoch in range(num_epochs):
-    train_loss = train(model, train_loader, criterion, optimizer, device)
-    test_loss, accuracy = test(model, test_loader, criterion, device)
+    train_loss = train(train_loader,model, criterion, optimizer)
+    test_loss, accuracy = test(test_loader,model, criterion)
 
     print(f"Epoch [{epoch+1}/{num_epochs}] - "
           f"Train Loss: {train_loss:.4f} - "

@@ -12,78 +12,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-def visualize_predictions(model, test_loader, device, num_samples=5):
-    """ 
-    Visualize model predictions for ECG signals.
-    
-    Args:
-    - model: Trained PyTorch model
-    - test_loader: DataLoader for test dataset
-    - device: Torch device (cuda/cpu)
-    - num_samples: Number of samples to visualize
-    """
-    model.eval()
-    
-    # Create a figure 
-    fig, axes = plt.subplots(num_samples, 1, figsize=(15, 3*num_samples))
-    fig.suptitle('ECG Signal Predictions', fontsize=16)
-    
-    with torch.no_grad():
-        for batch_idx, (ecg_data, labels) in enumerate(test_loader):
-            if batch_idx >= 1:  # Only process first batch
-                break
-            
-            ecg_data, labels = ecg_data.to(device), labels.to(device)
-            outputs = model(ecg_data)
-            
-            # Convert to numpy for plotting
-            ecg_np = ecg_data.cpu().numpy()
-            labels_np = labels.cpu().numpy()
-            outputs_np = outputs.cpu().numpy()
-            
-            # Plot for each sample
-            for i in range(min(ecg_data.size(0), num_samples)):
-                # Randomly select one channel
-                channel = np.random.randint(0, ecg_np.shape[1])
-                
-                # Plot the original signal
-                ax = axes[i] if num_samples > 1 else axes
-                ax.plot(ecg_np[i, channel], label='Signal', color='blue', alpha=0.7)
-                
-                # Find true label indices (where labels > 0.5)
-                true_label_indices = np.where(labels_np[i] > 0.5)[0]
-                
-                # Find predicted label indices (where outputs > 0.5)
-                pred_label_indices = np.where(outputs_np[i] > 0.5)[0]
-                
-                # Plot true label markers as vertical lines
-                for idx in true_label_indices:
-                    ax.axvline(
-                        x=idx, 
-                        color='green', 
-                        linestyle='--', 
-                        linewidth=2, 
-                        label='True QRS' if len(true_label_indices) > 0 else ''
-                    )
-                
-                # Plot predicted label markers as vertical lines
-                for idx in pred_label_indices:
-                    ax.axvline(
-                        x=idx, 
-                        color='red', 
-                        linestyle=':', 
-                        linewidth=2, 
-                        label='Predicted QRS' if len(pred_label_indices) > 0 else ''
-                    )
-                
-                # Formatting
-                ax.set_title(f'Sample {i}, Channel {channel+1}')
-                ax.set_xlabel('Time')
-                ax.set_ylabel('Amplitude')
-                ax.legend()
-    
-    plt.tight_layout()
-    plt.subplots_adjust(top=0.95)
+def visualize_predictions(outputs, signal, labels, num_samples=5):
+    x = np.arange(100)
+
+    # Plot the signal
+    plt.plot(x, signal, label="Signal")
+
+    # Plot a dot at the given index
+    plt.scatter(x, outputs*100, color="red", zorder=5, label=f"Dot at index ")
+    plt.scatter(x, labels*150, color="blue", zorder=5, label=f"Dot at index ")
+    plt.xlabel("Index")
+    plt.ylabel("Signal Value")
+    plt.title("Signal with Dot at a Specific Index")
+    plt.legend()
     plt.show()
 
 
