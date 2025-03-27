@@ -3,35 +3,38 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset, random_split
-
+import random
 import time
-
+window_size = 250
 
 from plotting_test import visualize_predictions
-from file_reading import dataset_builder, preprocess_ecg_data
+from file_reading import dataset_builder, preprocess_ecg_data, load_challenge_data
 
 # Define Fetal QRS Detector 
 class FetalQRSWindowDetector(nn.Module):
-    def __init__(self, in_channels=4, hidden_width = 2):
+    def __init__(self, in_channels=4, hidden_width = 8):
         super(FetalQRSWindowDetector, self).__init__()
-        self.conv1 = nn.Conv1d(in_channels, 2, kernel_size=5, padding=2)
-        self.bn2 = nn.BatchNorm1d(2)
-        self.fc = nn.Linear(2 * 100, 100)  # Adjust if needed
+        self.conv1 = nn.Conv1d(in_channels, hidden_width, kernel_size=5, padding=2)
+        self.bn2 = nn.BatchNorm1d(hidden_width)
+        self.fc = nn.Linear(hidden_width * window_size, window_size)  # Adjust if needed
 
     def forward(self, x):
         # Ensure input is [batch, channels, length]
-        x = x.view(-1, 4, 100)  # Reshape to correct input format
+        x = x.view(-1, 4, window_size)  # Reshape to correct input format
         x = torch.relu(self.bn2(self.conv1(x)))
         x = x.view(x.size(0), -1)  # Flatten
         x = torch.sigmoid(self.fc(x))  # Binary classification
         return x
 
 # Load dataset
-def load_data():
-    window_length = 100
-    stride = 50
+def load_data(challenge = False):
+    window_length = window_size
+    stride = 150
     # Simulate a batch of 4-channel windowed data: shape (batch, 4, 100)
-    raw_ecg_data, fqrs = dataset_builder("./data", [2,9,15,28])
+    if challenge:
+        raw_ecg_data, fqrs = load_challenge_data()
+    else:
+        raw_ecg_data, fqrs = dataset_builder("./data", [2,9,15,28])
     ecg_data, labels = preprocess_ecg_data(raw_ecg_data, fqrs, window_length, stride)
     print("lables :",labels.shape," ecg_data:  ", ecg_data.shape)
     pure_ecg = []
@@ -109,10 +112,10 @@ def test(dataloader, model, loss_fn):
     for X, y in dataloader:
         pred = model(X)  # Model outputs 100 values per sample
         # Compute loss
-        rand = np.random()
+        #rand = np.random()
         if total_loss == 0:
             #index is random, has not effect on 
-            visualize_predictions(pred[3].cpu().detach().numpy()*1000, X[0][0].cpu().detach().numpy(), y.cpu().detach().numpy()[3])
+            visualize_predictions(pred[2].cpu().detach().numpy()*1000, X[0][0].cpu().detach().numpy(), y.cpu().detach().numpy()[2])
 
         # Convert predictions to binary (1 if feature detected, 0 otherwise)
         pred_binary = (pred > 0.5).float()  # Thresholding for binary detection
@@ -136,7 +139,7 @@ def test(dataloader, model, loss_fn):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load datasets
-train_dataset, test_dataset = load_data()
+train_dataset, test_dataset = load_data(True)
 
 # Create DataLoaders
 train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
@@ -156,7 +159,7 @@ start_time = time.time()  # Start the timer
 
 # Training loop
 
-batch_size = 24
+batch_size = 64
 num_epochs = 7
 
 

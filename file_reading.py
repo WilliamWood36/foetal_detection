@@ -4,7 +4,6 @@ Created on Sun Nov 24 18:48:01 2024
 
 @author: acd21ww
 """
-
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
@@ -35,6 +34,9 @@ def clean_data():
         # Modify only the first two lines
         for i in range(min(2, len(lines))): 
             lines[i] = lines[i].replace("'", "\"")
+        lines[1]  = "\n"
+                
+            
         with open(file_name, "w") as outfile:
             outfile.writelines(lines)
 
@@ -56,25 +58,25 @@ def load_challenge_data(channels=4):
 
     # Find matching pairs
     paired_files = [(a_files[key], s_files[key]) for key in a_files if key in s_files]
-    print(paired_files)
 
     # Read the CSV file without skipping rows
     dataset = []
     lables = []
+
     for X,y in paired_files:
         data = pd.read_csv(directory+"/"+X)
+        label_data = pd.read_csv(directory+"/"+y)
+
         temp = []
-        print(np.array(data).shape)
-        print("Available columns in", X, ":", data.columns.tolist())
         data.columns = data.columns.str.strip()  # Removes leading/trailing spaces
-        lables.append(y)
-        print("loading: ", X)
+        lables.append([int(ys) for ys in label_data])
+
         for i in range(0,channels):
             temp.append(data[data_titles[i]])
             
         dataset.append(temp)
 
-    return dataset, lables
+    return np.array(dataset), lables
 
 
 def reshape_date(data,num_channels):
@@ -212,7 +214,7 @@ def build_waveforms(files):
 
 import numpy as np
 
-def preprocess_ecg_data(ecg_data, qrs_positions, window_size=100, stride=50):
+def preprocess_ecg_data(ecg_data, qrs_positions, window_size=500, stride=50):
     """
     Splits ECG data into overlapping windows and assigns QRS positions.
     
@@ -226,7 +228,7 @@ def preprocess_ecg_data(ecg_data, qrs_positions, window_size=100, stride=50):
     - X: (num_windows, 4, window_size) -> List of segmented ECG windows
     - y: (num_windows,) -> QRS positions relative to each window (-1 if no QRS found)
     """
-    
+    # this only works for analogus data, 
     num_trials, num_channels, num_samples = ecg_data.shape
     X, y = [], []
 
@@ -240,7 +242,7 @@ def preprocess_ecg_data(ecg_data, qrs_positions, window_size=100, stride=50):
             end = start + window_size
             segment = trial_data[:, start:end]  # Shape: (4, window_size)
             # Use global qrs_positions array for all channels
-            qrs_in_window = [q - start for q in trial_qrs_positions if start <= q < end]
+            qrs_in_window = [q - start for q in trial_qrs_positions if start <= int(q) < end]
 
             # Assign the first QRS position found, or -1 if none exist
             label = qrs_in_window[0] if qrs_in_window else -1
@@ -248,18 +250,18 @@ def preprocess_ecg_data(ecg_data, qrs_positions, window_size=100, stride=50):
             y.append(label)  
     
 
-            #if i % 400 == 0:
-                # x = np.arange(100)
-                # # Plot the signal
-                # plt.plot(x, segment[0], label="Signal")
-                # # Plot a dot at the given index
-                # plt.scatter(label, 50, color="red", zorder=5, label=f"Dot at index ")
+            if i % 10000 == 0:
+                x = np.arange(len(segment[0]))
+                # Plot the signal
+                plt.plot(x, segment[0], label="Signal")
+                # Plot a dot at the given index
+                plt.scatter(label, 50, color="red", zorder=5, label=f"Dot at index ")
 
-                # plt.xlabel("Index")
-                # plt.ylabel("Signal Value")
-                # plt.title("Signal with Dot at a Specific Index")
-                # plt.legend()
-                # plt.show()
+                plt.xlabel("Index")
+                plt.ylabel("Signal Value")
+                plt.title("Signal with Dot at a Specific Index")
+                plt.legend()
+                #plt.show()
     
     return np.array(X), np.array(y)  # Return as NumPy arrays for ML compatibility
 

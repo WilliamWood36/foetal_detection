@@ -111,9 +111,17 @@ class adjustments:
 
 # Specify the path to your CSV file
 file_path = 'test_set/a26.csv'
+fqrs_file_path = 'test_set/a26.csv'
 
 # Read the CSV file without skipping rows
 data = pd.read_csv(file_path)
+
+label_data = pd.read_csv(fqrs_file_path)
+
+temp = []
+data.columns = data.columns.str.strip()  # Removes leading/trailing spaces
+fqrs_data = [int(ys) for ys in label_data])
+
 
 # Display the first few rows and column names
 print("First few rows of the DataFrame:")
