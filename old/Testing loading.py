@@ -106,24 +106,14 @@ class adjustments:
         return self.lp_slider.val
 
     def get_hp_val(self):
-        return self.hp_slider.val
-
-
-
-
-
-
-
-
-
-
+        return self.hp_slider.va
 
 
 # Specify the path to your CSV file
-file_path = 'a26.csv'
+file_path = 'test_set/a26.csv'
 
 # Read the CSV file without skipping rows
-data = pd.read_csv(file_path)[5000:10000]
+data = pd.read_csv(file_path)
 
 # Display the first few rows and column names
 print("First few rows of the DataFrame:")

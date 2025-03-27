@@ -1,5 +1,5 @@
-'Elapsed time','AECG1','AECG2','AECG3','AECG4'
-'seconds','uV','uV','uV','uV'
+"Elapsed time","AECG1","AECG2","AECG3","AECG4"
+"seconds","uV","uV","uV","uV"
 0.000,-0.500,4.000,73.000,112.500
 0.001,0.000,4.000,73.000,113.000
 0.002,0.500,4.500,73.500,113.500

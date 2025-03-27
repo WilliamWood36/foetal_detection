@@ -12,11 +12,11 @@ from file_reading import dataset_builder, preprocess_ecg_data
 
 # Define Fetal QRS Detector 
 class FetalQRSWindowDetector(nn.Module):
-    def __init__(self, in_channels=4):
+    def __init__(self, in_channels=4, hidden_width = 2):
         super(FetalQRSWindowDetector, self).__init__()
-        self.conv1 = nn.Conv1d(in_channels, 16, kernel_size=5, padding=2)
-        self.bn2 = nn.BatchNorm1d(16)
-        self.fc = nn.Linear(16 * 100, 100)  # Adjust if needed
+        self.conv1 = nn.Conv1d(in_channels, 2, kernel_size=5, padding=2)
+        self.bn2 = nn.BatchNorm1d(2)
+        self.fc = nn.Linear(2 * 100, 100)  # Adjust if needed
 
     def forward(self, x):
         # Ensure input is [batch, channels, length]
@@ -80,6 +80,9 @@ def train(dataloader, model, loss_fn, optimizer):
     for batch, (X, y) in enumerate(dataloader):
         # Compute prediction and loss
         pred = model(X)
+        # if avg_loss == 0:
+        #     visualize_predictions(pred[0].cpu().detach().numpy()*1000, X[0][0].cpu().detach().numpy(), y.cpu().detach().numpy()[0])
+
         loss = loss_fn(pred, y)
 
         # Backpropagation
@@ -105,25 +108,27 @@ def test(dataloader, model, loss_fn):
 
     for X, y in dataloader:
         pred = model(X)  # Model outputs 100 values per sample
-        print(X.shape)
         # Compute loss
-        total_loss += loss_fn(pred, y).item()
+        rand = np.random()
+        if total_loss == 0:
+            #index is random, has not effect on 
+            visualize_predictions(pred[3].cpu().detach().numpy()*1000, X[0][0].cpu().detach().numpy(), y.cpu().detach().numpy()[3])
 
         # Convert predictions to binary (1 if feature detected, 0 otherwise)
         pred_binary = (pred > 0.5).float()  # Thresholding for binary detection
-        print(pred_binary.shape)
+
+        total_loss += loss_fn(pred, y).item()
         # Count correctly detected feature positions (overlap with label)
         correct_preds = (pred_binary * y).sum(dim=1)  # Count overlapping 1s per sample
         total_correct += correct_preds.sum().item()   # Sum across batch
         total_samples += y.sum().item()  # Total number of expected feature points
 
-        visualize_predictions(pred_binary[0].cpu().detach().numpy(), X[0][0].cpu().detach().numpy(), y.cpu().detach().numpy()[0])
 
 # Compute metrics
     average_loss = total_loss / len(dataloader)
     accuracy = total_correct / total_samples if total_samples > 0 else 0
 
-    print(f"Test Error: \n Accuracy: {(100*accuracy):>0.1f}%, Avg loss: {average_loss:>8f} \n")
+    print(f"Test --  Accuracy: {(100*accuracy):>0.1f}%, Avg loss: {average_loss:>8f} \n")
     return average_loss, accuracy
 
 
@@ -141,7 +146,7 @@ test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 model = FetalQRSWindowDetector(in_channels=4).to(device)
 
 criterion = nn.BCELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.01)
+optimizer = optim.Adam(model.parameters(), lr=0.005)
 
 start_time = time.time()  # Start the timer
 
@@ -150,9 +155,10 @@ start_time = time.time()  # Start the timer
 
 
 # Training loop
-learning_rate = 1e-3
-batch_size = 64
-num_epochs = 5
+
+batch_size = 24
+num_epochs = 7
+
 
 for epoch in range(num_epochs):
     train_loss = train(train_loader,model, criterion, optimizer)

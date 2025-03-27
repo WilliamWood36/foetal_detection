@@ -19,8 +19,8 @@ def visualize_predictions(outputs, signal, labels, num_samples=5):
     plt.plot(x, signal, label="Signal")
 
     # Plot a dot at the given index
-    plt.scatter(x, outputs*100, color="red", zorder=5, label=f"Dot at index ")
-    plt.scatter(x, labels*150, color="blue", zorder=5, label=f"Dot at index ")
+    plt.scatter(x, outputs*1, color="red", zorder=5, label=f"Dot at index ")
+    plt.scatter(x, (labels*1500 )-200, color="blue", zorder=5, label=f"Dot at index ")
     plt.xlabel("Index")
     plt.ylabel("Signal Value")
     plt.title("Signal with Dot at a Specific Index")

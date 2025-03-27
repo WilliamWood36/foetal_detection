@@ -7,14 +7,74 @@ Created on Sun Nov 24 18:48:01 2024
 
 from matplotlib import pyplot as plt
 import numpy as np
+import pandas as pd
 import wfdb
 from pathlib import Path
-import random
 
+
+import re
 import os
 import glob
 from collections import defaultdict
+#used for temocing 
+def clean_data():
+    directory = "test_set"  
 
+    # List all files in the directory
+    files = os.listdir(directory)
+    print("egg \n",files)
+    # Use regex to extract the numeric part of filenames
+    a_files = {re.match(r"a(\d+)\.csv", f).group(1): f for f in files if re.match(r"a\d+\.csv", f)}
+
+    for i in a_files:
+        file_name = directory +"/a"+ i + ".csv"
+        print(file_name)
+        with open(file_name, "r") as infile:
+            lines = infile.readlines()  # Read all lines
+
+        # Modify only the first two lines
+        for i in range(min(2, len(lines))): 
+            lines[i] = lines[i].replace("'", "\"")
+        with open(file_name, "w") as outfile:
+            outfile.writelines(lines)
+
+def load_challenge_data(channels=4):
+    dataset = []
+    data_titles = ['AECG1', 'AECG2','AECG3','AECG4']
+    
+
+
+    directory = "test_set"  
+
+    # List all files in the directory
+    files = os.listdir(directory)
+
+    # Use regex to extract the numeric part of filenames
+    a_files = {re.match(r"a(\d+)\.csv", f).group(1): f for f in files if re.match(r"a\d+\.csv", f)}
+    s_files = {re.match(r"a(\d+)\.fqrs\.txt$", f).group(1): f for f in files if re.match(r"a\d+\.fqrs\.txt$", f)}
+
+
+    # Find matching pairs
+    paired_files = [(a_files[key], s_files[key]) for key in a_files if key in s_files]
+    print(paired_files)
+
+    # Read the CSV file without skipping rows
+    dataset = []
+    lables = []
+    for X,y in paired_files:
+        data = pd.read_csv(directory+"/"+X)
+        temp = []
+        print(np.array(data).shape)
+        print("Available columns in", X, ":", data.columns.tolist())
+        data.columns = data.columns.str.strip()  # Removes leading/trailing spaces
+        lables.append(y)
+        print("loading: ", X)
+        for i in range(0,channels):
+            temp.append(data[data_titles[i]])
+            
+        dataset.append(temp)
+
+    return dataset, lables
 
 
 def reshape_date(data,num_channels):
@@ -50,11 +110,10 @@ def dataset_builder(base_directory, signal_indexes, seperate=False):
         waveforms = build_waveforms(files)
         
         for w in waves:
-            print("adding wave: ",w)
+            #print("adding wave: ",w)
             dataset.append(np.array((waveforms["wave1"][signal_indexes])))
             foetalDataset.append(waveforms["foetal_qrs"])
         
-        print(np.array(dataset).shape,np.array(foetalDataset[-1]).shape)
 
     return np.array(dataset), foetalDataset
             
@@ -140,12 +199,11 @@ def build_waveforms(files):
   
             if "fecg" in file:
                 foetal_qrs = qrs_data
-                print(np.array(foetal_qrs).shape)
             else:
                 maternal_qrs = qrs_data
     return_dict = {
-            "wave1": fecg_signal,
-            "wave2": fecg_signal,
+            "wave1": waveform1,
+            "wave2": waveform2,
             "maternal_qrs": maternal_qrs,
             "foetal_qrs": foetal_qrs
         }
@@ -160,7 +218,7 @@ def preprocess_ecg_data(ecg_data, qrs_positions, window_size=100, stride=50):
     
     Args:
     - ecg_data: (14, 4, 75000) -> 14 trials of 4-channel ECG signals (time, channels, samples)
-    - qrs_positions: List of QRS positions for each trial (List of lists)
+    - qrs_p 3ositions: List of QRS positions for each trial (List of lists)
     - window_size: Number of samples per window
     - stride: Step size for sliding window
     
