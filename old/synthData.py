@@ -3,9 +3,21 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from scipy import signal
-from bss import function_pca
+from numpy import linalg as LA
+
+def function_pca(data, channels,components):
 
 
+    # Separate each channel into individual arrays
+
+    # Step 1: Standardize the data (important for PCA)
+    scaler = StandardScaler()
+    data_scaled = scaler.fit_transform(data.T)  # Standardizing each column (channel)
+
+    # Step 2: Apply PCA
+    pca = PCA(n_components=components)  # You can choose the number of components based on your needs
+    pca_result = pca.fit_transform(data_scaled)
+    return (pca_result, pca)
 def lowPassFilter(order, cutoff, data):
     b, a = signal.butter(order, cutoff, fs=1000.0)
     z = signal.lfilter(b, a, data)

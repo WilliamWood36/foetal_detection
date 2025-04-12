@@ -9,13 +9,64 @@ import numpy as np
 import pandas as pd
 import wfdb
 from pathlib import Path
-
+from sklearn import preprocessing
+from sklearn.preprocessing import MinMaxScaler
 
 import re
 import os
 import glob
 from collections import defaultdict
+
+from filtering import highPassFilter, lowPassFilter, remove_baseline_wander
 #used for temocing 
+
+donwsample_factor = 4
+frequency = 250
+
+
+
+def downsample_by_averaging(signal, factor=donwsample_factor):
+    """
+    Downsamples the signal by averaging every `factor` samples.
+    
+    Parameters:
+    - signal: 1D NumPy array
+    - factor: Downsampling factor (e.g., 4 for 1000 Hz -> 250 Hz)
+    
+    Returns:
+    - downsampled signal as a 1D NumPy array
+    """
+    trimmed_length = len(signal) - (len(signal) % factor)  # make it divisible by factor
+    trimmed_signal = signal[:trimmed_length]
+    downsampled = trimmed_signal.reshape(-1, factor).mean(axis=1)
+    return downsampled
+
+def connvert_to_difference_data():
+    directory = "test_set_diff"
+    files = os.listdir(directory)
+    print("egg \n", files)
+
+    # Use regex to extract the numeric part of filenames
+    a_files = {
+        re.match(r"a(\d+)\.csv", f).group(1): f
+        for f in files if re.match(r"a\d+\.csv", f)
+    }
+
+    for i in a_files:
+        file_name = os.path.join(directory, "a" + i + ".csv")
+        print(f"Processing: {file_name}")
+
+        # Read CSV into a DataFrame
+        df = pd.read_csv(file_name)
+
+        # Convert all columns to numeric (if not already), then calculate difference
+        df = df.apply(pd.to_numeric, errors='coerce')  # Convert non-numeric to NaN
+        df_diff = df.diff().fillna(0)  # Replace NaN (from first row) with 0
+
+        # Save back to the same file (or modify if needed)
+        df_diff.to_csv(file_name, index=False)
+
+
 def clean_data():
     directory = "test_set"  
 
@@ -40,11 +91,24 @@ def clean_data():
         with open(file_name, "w") as outfile:
             outfile.writelines(lines)
 
-def load_challenge_data(channels=4):
+def preprocess_multi(data, scaler,Bscutoff = 1, notch = 50, fs = 250, downsample = True ):
+    filtered = [] 
+    for w in data:
+        filtered.append(preprocess_single)
+    return filtered
+
+def preprocess_single(data, scaler,Bscutoff = 10, notch = 50, fs = 250, downsample = True ):
+    filt = remove_baseline_wander(data,fs=frequency,bcutoff=Bscutoff)
+    if downsample:
+        filt = downsample_by_averaging(filt)
+    down = scaler.fit_transform(filt.reshape(-1,1))
+    return np.squeeze(np.array(down))
+    
+def load_challenge_data(directory = "test_set",channels=4):
+    # returns 
     dataset = []
     data_titles = ['AECG1', 'AECG2','AECG3','AECG4']
     
-
 
     directory = "test_set"  
 
@@ -56,25 +120,26 @@ def load_challenge_data(channels=4):
     s_files = {re.match(r"a(\d+)\.fqrs\.txt$", f).group(1): f for f in files if re.match(r"a\d+\.fqrs\.txt$", f)}
 
 
-    # Find matching pairs
+    # Find matching pair
     paired_files = [(a_files[key], s_files[key]) for key in a_files if key in s_files]
 
     # Read the CSV file without skipping rows
     dataset = []
     lables = []
-
+    scaler = MinMaxScaler(feature_range=(-1, 1))
     for X,y in paired_files:
         data = pd.read_csv(directory+"/"+X)
         label_data = pd.read_csv(directory+"/"+y)
-
+        print("Loading Challenge File: ",directory+"/"+X,"     ",directory+"/"+y )
         temp = []
         data.columns = data.columns.str.strip()  # Removes leading/trailing spaces
-        lables.append([int(ys) for ys in label_data])
+        lables.append([int(ys)/donwsample_factor for ys in label_data.iloc[:, 0] ])
 
         for i in range(0,channels):
-            temp.append(data[data_titles[i]])
+            temp.append(preprocess_single(np.array(data[data_titles[i]]).reshape(-1,1),scaler))
             
         dataset.append(temp)
+        
 
     return np.array(dataset), lables
 
@@ -105,6 +170,8 @@ def dataset_builder(base_directory, signal_indexes, seperate=False):
     foetalDataset = []
     dataset = []
     total_maternal_waves = 0
+    scaler = MinMaxScaler(feature_range=(-1, 1))
+    
     for record_name, files in grouped_files.items():
         print(f"Processing Record: {record_name}")
 
@@ -113,10 +180,11 @@ def dataset_builder(base_directory, signal_indexes, seperate=False):
         
         for w in waves:
             #print("adding wave: ",w)
-            dataset.append(np.array((waveforms["wave1"][signal_indexes])))
+            print("w shape",np.array(waveforms["wave1"][signal_indexes]).shape)
+            dataset.append(preprocess_single(np.array((waveforms["wave1"][signal_indexes])),scaler, downsample=False))
             foetalDataset.append(waveforms["foetal_qrs"])
         
-
+    print(np.array(dataset).shape)
     return np.array(dataset), foetalDataset
             
 
@@ -214,7 +282,7 @@ def build_waveforms(files):
 
 import numpy as np
 
-def preprocess_ecg_data(ecg_data, qrs_positions, window_size=500, stride=50):
+def preprocess_ecg_data(ecg_data, qrs_positions, window_size=500, stride=50,filter=True):
     """
     Splits ECG data into overlapping windows and assigns QRS positions.
     
@@ -236,33 +304,22 @@ def preprocess_ecg_data(ecg_data, qrs_positions, window_size=500, stride=50):
         trial_data = ecg_data[trial]  # Shape: (4, 75000)
         trial_qrs_positions = qrs_positions[trial]
         num_windows = (num_samples - window_size) // stride + 1  # Compute number of windows
-        
         for i in range(num_windows):
             start = i * stride
             end = start + window_size
             segment = trial_data[:, start:end]  # Shape: (4, window_size)
+            # for i in range(0,len(segment)):
+            #     z = segment[i]
+            #     z1 = highPassFilter(3, 20, z)
+            #     segment[i] =  lowPassFilter(3, 50, z1)
+                
             # Use global qrs_positions array for all channels
-            qrs_in_window = [q - start for q in trial_qrs_positions if start <= int(q) < end]
-
+            qrs_in_window = [q for q in trial_qrs_positions if start <= int(q) < end]
+            label = qrs_in_window[0] - start if qrs_in_window else -1
             # Assign the first QRS position found, or -1 if none exist
-            label = qrs_in_window[0] if qrs_in_window else -1
             X.append(segment)  
             y.append(label)  
-    
 
-            if i % 10000 == 0:
-                x = np.arange(len(segment[0]))
-                # Plot the signal
-                plt.plot(x, segment[0], label="Signal")
-                # Plot a dot at the given index
-                plt.scatter(label, 50, color="red", zorder=5, label=f"Dot at index ")
-
-                plt.xlabel("Index")
-                plt.ylabel("Signal Value")
-                plt.title("Signal with Dot at a Specific Index")
-                plt.legend()
-                #plt.show()
-    
     return np.array(X), np.array(y)  # Return as NumPy arrays for ML compatibility
 
  

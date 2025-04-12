@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from scipy.fft import fft, fftfreq
 
-
+window = 2000
 data_titles = ['AECG1', 'AECG2','AECG3']
 global adj 
 
@@ -65,7 +65,7 @@ def update_plot_vals(hp_cutoff,lp_cutoff):
         filtered_data.append(z)
 
         #formatting the plots
-        axis[axis_index].plot(data['Elapsed_time'], z, label=f'Filtered {data_titles[i]}', color='red')
+        axis[axis_index].plot(data['Elapsed_time'][:window], z[:window], label=f'Filtered {data_titles[i]}', color='red')
         axis[axis_index].set_title(f'Filtered {data_titles[i]} with HP cutoff: {int(hp_cutoff)} Hz, LP cutoff: {int(lp_cutoff)}')
         axis[axis_index].set_ylabel(data_titles[i])
         axis[axis_index].legend()
@@ -106,7 +106,7 @@ class adjustments:
         return self.lp_slider.val
 
     def get_hp_val(self):
-        return self.hp_slider.va
+        return self.hp_slider.val
 
 
 # Specify the path to your CSV file
@@ -120,7 +120,6 @@ label_data = pd.read_csv(fqrs_file_path)
 
 temp = []
 data.columns = data.columns.str.strip()  # Removes leading/trailing spaces
-fqrs_data = [int(ys) for ys in label_data])
 
 
 # Display the first few rows and column names
@@ -138,8 +137,8 @@ try:
     
     # Original plot
     for index, name in enumerate(data_titles):
-        x = data['Elapsed_time']
-        y = data[name]
+        x = data['Elapsed_time'][:window]
+        y = data[name][:window]
         
         axis[index * 2].plot(x, y, label=name, color='blue')
         axis[index * 2].set_title(f'Original {name}')

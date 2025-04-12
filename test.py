@@ -4,37 +4,48 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset, random_split
 import random
-import time
-window_size = 250
 
-from plotting_test import visualize_predictions
+from sklearn.metrics import f1_score
+import torch.optim.lr_scheduler as lr_scheduler
+
+import time
+from sklearn import preprocessing
+window_size = 150
+data_path = "test_set_diff"
+
+
+from plotting_test import visualize_predictions, base_results_plot
 from file_reading import dataset_builder, preprocess_ecg_data, load_challenge_data
 
 # Define Fetal QRS Detector 
 class FetalQRSWindowDetector(nn.Module):
-    def __init__(self, in_channels=4, hidden_width = 8):
+    def __init__(self, in_channels=4, hidden_width=32, dropout_prob=0.2):
         super(FetalQRSWindowDetector, self).__init__()
         self.conv1 = nn.Conv1d(in_channels, hidden_width, kernel_size=5, padding=2)
         self.bn2 = nn.BatchNorm1d(hidden_width)
+        self.dropout = nn.Dropout(dropout_prob)  # Add dropout layer
         self.fc = nn.Linear(hidden_width * window_size, window_size)  # Adjust if needed
 
     def forward(self, x):
         # Ensure input is [batch, channels, length]
         x = x.view(-1, 4, window_size)  # Reshape to correct input format
         x = torch.relu(self.bn2(self.conv1(x)))
-        x = x.view(x.size(0), -1)  # Flatten
+        x = self.dropout(x)  # Apply dropout after convolution
+        x = x.view(x.size(0), -1)  # Flatten the output
         x = torch.sigmoid(self.fc(x))  # Binary classification
         return x
-
+    
 # Load dataset
-def load_data(challenge = False):
+def load_data(challenge = True):
     window_length = window_size
     stride = 150
     # Simulate a batch of 4-channel windowed data: shape (batch, 4, 100)
     if challenge:
-        raw_ecg_data, fqrs = load_challenge_data()
+        raw_ecg_data, fqrs = load_challenge_data(directory="test_set_filtered")
     else:
         raw_ecg_data, fqrs = dataset_builder("./data", [2,9,15,28])
+    print("lables :",len(fqrs)," ecg_data:  ", raw_ecg_data.shape)
+
     ecg_data, labels = preprocess_ecg_data(raw_ecg_data, fqrs, window_length, stride)
     print("lables :",labels.shape," ecg_data:  ", ecg_data.shape)
     pure_ecg = []
@@ -44,8 +55,8 @@ def load_data(challenge = False):
         segment = i
         label = np.zeros(window_length)
         if labels[index] != -1:
-            start = max(0, labels[index] - 2)
-            end = min(window_length, labels[index] + 3)
+            start = int(max(0, labels[index] - 3))
+            end = int(min(window_length, labels[index] + 2))
             label[start:end] = 1.0
 
         pure_ecg.append(segment)
@@ -73,7 +84,7 @@ def load_data(challenge = False):
 
 # The rest of the code remains the same...
 # Training function
-def train(dataloader, model, loss_fn, optimizer):
+def train(dataloader, model, loss_fn, optimizer,batch_size):
     size = len(dataloader.dataset)
     # Set the model to training mode - important for batch normalization and dropout layers
     # Unnecessary in this situation but added for best practices
@@ -83,9 +94,9 @@ def train(dataloader, model, loss_fn, optimizer):
     for batch, (X, y) in enumerate(dataloader):
         # Compute prediction and loss
         pred = model(X)
-        # if avg_loss == 0:
-        #     visualize_predictions(pred[0].cpu().detach().numpy()*1000, X[0][0].cpu().detach().numpy(), y.cpu().detach().numpy()[0])
-
+        if avg_loss == 0:
+            print(len(pred[0].cpu().detach().numpy()))
+            visualize_predictions(pred[0].cpu().detach().numpy(), X[0][0].cpu().detach().numpy(), y.cpu().detach().numpy()[0])
         loss = loss_fn(pred, y)
 
         # Backpropagation
@@ -99,81 +110,110 @@ def train(dataloader, model, loss_fn, optimizer):
             print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
     return avg_loss/batches
 
-def test(dataloader, model, loss_fn):
-    # Set the model to evaluation mode - important for batch normalization and dropout layers
-    # Unnecessary in this situation but added for best practices
+def test(dataloader, model, loss_fn, threshold=0.2):
     model.eval()
-    size = len(dataloader.dataset)
-    num_batches = len(dataloader)
     total_loss = 0.0
     total_correct = 0
     total_samples = 0
+    all_labels = []
+    all_preds = []
+    
+    with torch.no_grad():
+        for X, y in dataloader:
+            pred = model(X)
+            loss = loss_fn(pred, y)
+            total_loss += loss.item()
+            
+            # Apply threshold for binary classification
+            pred_binary = (pred > threshold).float()
+            
+            # Collect predictions and labels for F1 score computation
+            all_labels.append(y.detach().cpu().numpy())
+            all_preds.append(pred_binary.detach().cpu().numpy())
+            
+            total_correct += (pred_binary * y).sum().item()
+            total_samples += y.sum().item()
 
-    for X, y in dataloader:
-        pred = model(X)  # Model outputs 100 values per sample
-        # Compute loss
-        #rand = np.random()
-        if total_loss == 0:
-            #index is random, has not effect on 
-            visualize_predictions(pred[2].cpu().detach().numpy()*1000, X[0][0].cpu().detach().numpy(), y.cpu().detach().numpy()[2])
-
-        # Convert predictions to binary (1 if feature detected, 0 otherwise)
-        pred_binary = (pred > 0.5).float()  # Thresholding for binary detection
-
-        total_loss += loss_fn(pred, y).item()
-        # Count correctly detected feature positions (overlap with label)
-        correct_preds = (pred_binary * y).sum(dim=1)  # Count overlapping 1s per sample
-        total_correct += correct_preds.sum().item()   # Sum across batch
-        total_samples += y.sum().item()  # Total number of expected feature points
-
-
-# Compute metrics
-    average_loss = total_loss / len(dataloader)
-    accuracy = total_correct / total_samples if total_samples > 0 else 0
-
-    print(f"Test --  Accuracy: {(100*accuracy):>0.1f}%, Avg loss: {average_loss:>8f} \n")
-    return average_loss, accuracy
-
-
-# Main execution
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# Load datasets
-train_dataset, test_dataset = load_data(True)
-
-# Create DataLoaders
-train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
-
-# Initialize model, loss, optimizer
-model = FetalQRSWindowDetector(in_channels=4).to(device)
-
-criterion = nn.BCELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.005)
-
-start_time = time.time()  # Start the timer
+    avg_loss = total_loss / len(dataloader)
+    accuracy = total_correct / total_samples if total_samples > 0 else 0.0
+    
+    # Compute F1 score (flatten arrays)
+    all_labels = np.concatenate(all_labels).flatten()
+    all_preds = np.concatenate(all_preds).flatten()
+    f1 = f1_score(all_labels, all_preds, zero_division=0)
+    
+    print(f"Test -- Accuracy: {accuracy*100:.2f}%, Avg Loss: {avg_loss:.6f}, F1 Score: {f1:.3f}")
+    return avg_loss, accuracy, f1
 
 
 
+def train_test_cycle(loaders, model, criterion=nn.BCELoss(), batch_size=64, threshold=0.2, lr=0.001, epochs=200):
+    optimizer = optim.Adam(model.parameters(), lr)
+    
+    # Add a learning rate scheduler (e.g., ReduceLROnPlateau)
+    #scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5, factor=0.9)
+    
+    start_time = time.time()  # Start the timer
+    progressive_accuracy, progressive_loss, progressive_f1 = [], [], []
+    
+    for epoch in range(epochs):
+        criterion = nn.BCELoss()
+        train_loss = train(loaders[0], model, criterion, optimizer, batch_size)
+        test_loss, accuracy, f1_score = test(loaders[1], model, criterion, threshold)
+
+        # Step the scheduler based on test loss
+        #scheduler.step(f1_score)  # Adjust the learning rate based on the test loss
+
+        print(f"Epoch [{epoch + 1}/{epochs}] - " +
+              f"Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, " +
+              f"Accuracy: {accuracy * 100:.2f}%, F1: {f1_score:.3f}")
+        
+        progressive_accuracy.append(accuracy)
+        progressive_loss.append(test_loss)
+        progressive_f1.append(f1_score)
+
+    base_results_plot(epochs, progressive_loss, progressive_accuracy, progressive_f1)
+    end_time = time.time()  # End the timer
+    elapsed_time = end_time - start_time  # Compute elapsed time
+    print(f"Training completed in {elapsed_time:.2f} seconds")
 
 
-# Training loop
-
-batch_size = 64
-num_epochs = 7
 
 
-for epoch in range(num_epochs):
-    train_loss = train(train_loader,model, criterion, optimizer)
-    test_loss, accuracy = test(test_loader,model, criterion)
 
-    print(f"Epoch [{epoch+1}/{num_epochs}] - "
-          f"Train Loss: {train_loss:.4f} - "
-          f"Test Loss: {test_loss:.4f} - "
-          f"Accuracy: {accuracy:.2f}%")
 
-end_time = time.time()  # End the timer
-elapsed_time = end_time - start_time  # Compute elapsed time
+
+
+
+
+
+
+# # Main execution
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# # Load datasets
+# train_dataset, test_dataset = load_data(challenge=True)
+
+# # Create DataLoaders
+# train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+# test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+
+# # Initialize model, loss, optimizer
+# model = FetalQRSWindowDetector(in_channels=4).to(device)
+
+# criterion = nn.BCELoss()
+
+
+
+
+
+
+
+# # Training loop
+
+# batch_size = 32
+# num_epochs = 200
+
 
 
 # import matplotlib.pyplot as plt
@@ -275,4 +315,3 @@ elapsed_time = end_time - start_time  # Compute elapsed time
 
 
 
-print(f"Execution Time: {elapsed_time:.6f} seconds")
