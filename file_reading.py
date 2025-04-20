@@ -25,7 +25,7 @@ frequency = 250
 
 
 
-def downsample_by_averaging(signal, factor=donwsample_factor):
+def downsample_by_averaging(signal, factor=donwsample_factor,fs=frequency):
     """
     Downsamples the signal by averaging every `factor` samples.
     
@@ -36,6 +36,7 @@ def downsample_by_averaging(signal, factor=donwsample_factor):
     Returns:
     - downsampled signal as a 1D NumPy array
     """
+
     trimmed_length = len(signal) - (len(signal) % factor)  # make it divisible by factor
     trimmed_signal = signal[:trimmed_length]
     downsampled = trimmed_signal.reshape(-1, factor).mean(axis=1)
@@ -68,7 +69,7 @@ def connvert_to_difference_data():
 
 
 def clean_data():
-    directory = "test_set"  
+    directory = "test_set_filtered"  
 
     # List all files in the directory
     files = os.listdir(directory)
@@ -104,13 +105,16 @@ def preprocess_single(data, scaler,Bscutoff = 10, notch = 50, fs = 250, downsamp
     down = scaler.fit_transform(filt.reshape(-1,1))
     return np.squeeze(np.array(down))
     
-def load_challenge_data(directory = "test_set",channels=4):
+
+
+
+
+def load_challenge_data(directory = "test_set_filtered",channels=4):
     # returns 
     dataset = []
     data_titles = ['AECG1', 'AECG2','AECG3','AECG4']
     
 
-    directory = "test_set"  
 
     # List all files in the directory
     files = os.listdir(directory)
@@ -132,14 +136,13 @@ def load_challenge_data(directory = "test_set",channels=4):
         label_data = pd.read_csv(directory+"/"+y)
         print("Loading Challenge File: ",directory+"/"+X,"     ",directory+"/"+y )
         temp = []
-        data.columns = data.columns.str.strip()  # Removes leading/trailing spaces
+        #data.columns = data.columns.str.strip()  # Removes leading/trailing spaces
         lables.append([int(ys)/donwsample_factor for ys in label_data.iloc[:, 0] ])
 
         for i in range(0,channels):
-            temp.append(preprocess_single(np.array(data[data_titles[i]]).reshape(-1,1),scaler))
+            temp.append(preprocess_single(np.array(data[data_titles[i]],dtype="float").reshape(-1,1),scaler,fs=250))
             
         dataset.append(temp)
-        
 
     return np.array(dataset), lables
 
@@ -324,6 +327,6 @@ def preprocess_ecg_data(ecg_data, qrs_positions, window_size=500, stride=50,filt
 
  
 
-
+clean_data()
 
     

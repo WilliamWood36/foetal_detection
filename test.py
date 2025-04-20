@@ -2,14 +2,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset, random_split
-import random
-
+from torch.utils.data import TensorDataset, random_split
 from sklearn.metrics import f1_score
-import torch.optim.lr_scheduler as lr_scheduler
 
 import time
-from sklearn import preprocessing
 window_size = 150
 data_path = "test_set_diff"
 
@@ -19,22 +15,38 @@ from file_reading import dataset_builder, preprocess_ecg_data, load_challenge_da
 
 # Define Fetal QRS Detector 
 class FetalQRSWindowDetector(nn.Module):
-    def __init__(self, in_channels=4, hidden_width=32, dropout_prob=0.2):
+    def __init__(self, in_channels=4, hidden_width=32, dropout_prob=0.4, kernel_size=9,filt_frequ=()):
         super(FetalQRSWindowDetector, self).__init__()
-        self.conv1 = nn.Conv1d(in_channels, hidden_width, kernel_size=5, padding=2)
+                # Channel attention mechanism using 1x1 convolution
+        # self.channel_gate = nn.Sequential(
+        #     nn.Conv1d(in_channels, in_channels, kernel_size=1),
+        #     nn.Sigmoid()
+        # )
+
+        # Compute padding to maintain the same output size (optional)
+        padding = kernel_size // 2
+
+        self.conv1 = nn.Conv1d(in_channels, hidden_width, kernel_size=kernel_size, padding=padding)
         self.bn2 = nn.BatchNorm1d(hidden_width)
-        self.dropout = nn.Dropout(dropout_prob)  # Add dropout layer
-        self.fc = nn.Linear(hidden_width * window_size, window_size)  # Adjust if needed
+        self.pool1 = nn.MaxPool1d(3)
+        self.dropout = nn.Dropout(dropout_prob)
+
+        # You must define window_size somewhere accessible — either globally or as an argument
+        pooled_length = window_size // 3  # 150 // 50 = 3
+        self.fc = nn.Linear(hidden_width * pooled_length, window_size)
+        self.fc2 = nn.Linear(window_size, window_size)
 
     def forward(self, x):
-        # Ensure input is [batch, channels, length]
-        x = x.view(-1, 4, window_size)  # Reshape to correct input format
+        x = x.view(-1, 4, window_size)  # Reshape: [batch, channels, length]
+        # gates = self.channel_gate(x)              # Learn channel importance
+        # x = x * gates    
         x = torch.relu(self.bn2(self.conv1(x)))
-        x = self.dropout(x)  # Apply dropout after convolution
-        x = x.view(x.size(0), -1)  # Flatten the output
-        x = torch.sigmoid(self.fc(x))  # Binary classification
+        x = self.pool1(x)
+        x = self.dropout(x)
+        x = x.view(x.size(0), -1)  # Flatten
+        x = torch.sigmoid(self.fc(x))
+        x = torch.sigmoid(self.fc2(x))
         return x
-    
 # Load dataset
 def load_data(challenge = True):
     window_length = window_size
@@ -94,9 +106,9 @@ def train(dataloader, model, loss_fn, optimizer,batch_size):
     for batch, (X, y) in enumerate(dataloader):
         # Compute prediction and loss
         pred = model(X)
-        if avg_loss == 0:
-            print(len(pred[0].cpu().detach().numpy()))
-            visualize_predictions(pred[0].cpu().detach().numpy(), X[0][0].cpu().detach().numpy(), y.cpu().detach().numpy()[0])
+        #if avg_loss == 0:
+            #print(len(pred[0].cpu().detach().numpy()))
+            #visualize_predictions(pred[0].cpu().detach().numpy(), X[0][0].cpu().detach().numpy(), y.cpu().detach().numpy()[0])
         loss = loss_fn(pred, y)
 
         # Backpropagation
@@ -107,7 +119,7 @@ def train(dataloader, model, loss_fn, optimizer,batch_size):
         avg_loss += loss.item()
         if batch % 100 == 0:
             loss, current = loss.item(), batch * batch_size + len(X)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+            #print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
     return avg_loss/batches
 
 def test(dataloader, model, loss_fn, threshold=0.2):
@@ -142,7 +154,7 @@ def test(dataloader, model, loss_fn, threshold=0.2):
     all_preds = np.concatenate(all_preds).flatten()
     f1 = f1_score(all_labels, all_preds, zero_division=0)
     
-    print(f"Test -- Accuracy: {accuracy*100:.2f}%, Avg Loss: {avg_loss:.6f}, F1 Score: {f1:.3f}")
+    #print(f"Test -- Accuracy: {accuracy*100:.2f}%, Avg Loss: {avg_loss:.6f}, F1 Score: {f1:.3f}")
     return avg_loss, accuracy, f1
 
 
@@ -154,8 +166,8 @@ def train_test_cycle(loaders, model, criterion=nn.BCELoss(), batch_size=64, thre
     #scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5, factor=0.9)
     
     start_time = time.time()  # Start the timer
-    progressive_accuracy, progressive_loss, progressive_f1 = [], [], []
-    
+    progressive_test_loss, progressive_loss, progressive_f1 = [], [], []
+    print(f"lr: {lr}, cutoff: {threshold}")
     for epoch in range(epochs):
         criterion = nn.BCELoss()
         train_loss = train(loaders[0], model, criterion, optimizer, batch_size)
@@ -164,18 +176,19 @@ def train_test_cycle(loaders, model, criterion=nn.BCELoss(), batch_size=64, thre
         # Step the scheduler based on test loss
         #scheduler.step(f1_score)  # Adjust the learning rate based on the test loss
 
-        print(f"Epoch [{epoch + 1}/{epochs}] - " +
-              f"Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, " +
-              f"Accuracy: {accuracy * 100:.2f}%, F1: {f1_score:.3f}")
+        # print(f"Epoch [{epoch + 1}/{epochs}] - " +
+        #       f"Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, " +
+        #       f"Accuracy: {accuracy * 100:.2f}%, F1: {f1_score:.3f}")
         
-        progressive_accuracy.append(accuracy)
+        progressive_test_loss.append(test_loss)
         progressive_loss.append(test_loss)
         progressive_f1.append(f1_score)
 
-    base_results_plot(epochs, progressive_loss, progressive_accuracy, progressive_f1)
+    #base_results_plot(epochs, progressive_loss, progressive_test_loss, progressive_f1)
     end_time = time.time()  # End the timer
     elapsed_time = end_time - start_time  # Compute elapsed time
-    print(f"Training completed in {elapsed_time:.2f} seconds")
+    return np.max(np.array(progressive_f1))
+    #print(f"Training completed in {elapsed_time:.2f} seconds")
 
 
 

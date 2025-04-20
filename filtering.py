@@ -7,24 +7,26 @@ from matplotlib.widgets import Slider
 from scipy.fft import fft, fftfreq
 
 
-def remove_baseline_wander(signal, fs=1000, bcutoff=0.7, order=2,ucutoff=100):
+
+def remove_baseline_wander(signal, fs=1000, bcutoff=0.7, ucutoff=75, order=2):
     """
-    Removes baseline wander using a high-pass filter.
-    
+    Removes baseline wander and high-frequency noise using a bandpass filter.
+
     Parameters:
     - signal: Input signal (1D array)
     - fs: Sampling frequency (Hz)
-    - cutoff: Cutoff frequency for baseline wander (Hz), typically 0.5–0.7 Hz
-    - order: Filter order (2 is usually sufficient)
+    - bcutoff: Low cutoff frequency for baseline wander (Hz), typically 0.5–0.7 Hz
+    - ucutoff: High cutoff frequency to remove high-frequency noise (Hz), e.g. 75 Hz
+    - order: Filter order (default is 2)
     """
     nyquist = 0.5 * fs
-    normal_bcutoff = bcutoff / nyquist
-    normal_ucutoff = ucutoff / nyquist
-    b, a = butter(order, normal_bcutoff, btype='high', analog=False)
-    filtered = filtfilt(b, a, np.array(signal).reshape(1,-1)[0])
+    low = bcutoff / nyquist
+    high = ucutoff / nyquist
 
-    return np.array(filtered).reshape(-1,1)
+    b, a = butter(order, [low, high], btype='band')  # Bandpass filter
+    filtered = filtfilt(b, a, np.array(signal).reshape(1, -1)[0])
 
+    return np.array(filtered).reshape(-1, 1)
 
 
 

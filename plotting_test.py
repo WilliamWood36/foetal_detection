@@ -2,9 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-from bss import function_pca
-from file_reading import group_files_by_record, build_waveforms
-
 
 
 
@@ -13,45 +10,44 @@ import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import torch
 
-def surface_plot():
 
-    # Example parameter ranges
-    x = np.linspace(10, 100, 30)   # e.g., parameter 1
-    y = np.linspace(10, 100, 30)   # e.g., parameter 2
-    x, y = np.meshgrid(x, y)
+def surface_plot(x, y, z):
+    # Create meshgrid
+    X, Y = np.meshgrid(x, y)  # X and Y will both have shape (m, n)
 
-    # Simulated F1 surface (replace this with your actual F1 data)
-    # This creates a "dip" similar to what your image shows
-    z = 1 - 0.3 * np.exp(-((x - 40)**2 + (y - 30)**2) / 300)
+    Z = np.array(z).T  # Ensure Z is also (m, n)
 
-    # Plotting
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
-    # Surface plot
-    surf = ax.plot_surface(x, y, z, cmap='jet', edgecolor='k')
+    # Plot the surface
+    surf = ax.plot_surface(X, Y, Z, cmap='jet', edgecolor='k')
 
     # Labels
-    ax.set_xlabel('Parameter 1')
-    ax.set_ylabel('Parameter 2')
+    ax.set_xlabel('Learning Rate')
+    ax.set_ylabel('Classification Threshold')
     ax.set_zlabel('F1-measure')
 
-    # View angle (optional)
+    # Optional: reverse x-axis if needed
+    # ax.set_xlim(ax.get_xlim()[::-1])
+
+    # Set view angle
     ax.view_init(elev=30, azim=135)
 
-    # Add color bar
+    # Color bar
     fig.colorbar(surf, shrink=0.5, aspect=5)
 
     plt.show()
 
 
 
-def base_results_plot(num_epochs, loss, accuracy, f1):
+
+def base_results_plot(num_epochs, training_loss, Test_loss, f1):
     epochs = list(range(0,num_epochs))
-    plt.plot(epochs, loss, label='Loss', color='red', marker='o')
+    plt.plot(epochs, training_loss, label='Training Loss', color='red', marker='o')
     plt.plot(epochs,f1,label="F1",color='green',marker='o')
     # Accuracy plot
-    plt.plot(epochs, accuracy, label='Accuracy', color='blue', marker='o')
+    plt.plot(epochs, Test_loss, label='Test_loss', color='blue', marker='o')
 
     plt.title('Training Loss and Accuracy Over Time')
     plt.xlabel('Epoch')
@@ -144,3 +140,4 @@ def basic_plot(signal_1,foetal_qrs, maternal_qrs = [], length = 1000, signal_2 =
 
 
 # Step 4: Print the explained variance ratio
+# surface_plot(0,0,0)
