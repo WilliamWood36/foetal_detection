@@ -9,12 +9,12 @@ from fvcore.nn import FlopCountAnalysis
 
 
 batch_size = 64
-lr = 0.003
-epochs = 50
-threashold = 0.2
+lr = 0.00005
+epochs = 200
+threashold = 0.3
 # Main execution
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+ 
 # Load datasets
 train_dataset, test_dataset = load_data(challenge=True)
 

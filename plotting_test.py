@@ -104,6 +104,19 @@ def plot_n_components(signal, components):
     plt.show()
 
 
+
+
+def base_2(x,y):
+    plt.figure(figsize=(8, 5))
+    plt.plot(x, y, marker='o', linestyle='-')
+    plt.title("F1 Score vs. Network Size")
+    plt.xlabel("Number of Parameters in Network")
+    plt.ylabel("F1 Score")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
 def basic_plot(signal_1,foetal_qrs, maternal_qrs = [], length = 1000, signal_2 = []):
     """
     

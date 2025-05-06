@@ -30,6 +30,77 @@ def remove_baseline_wander(signal, fs=1000, bcutoff=0.7, ucutoff=75, order=2):
 
 
 
+
+import numpy as np
+from scipy.spatial import KDTree
+
+def sampen_kdtree(signal, m=2, r=0.2, max_entropy=3, fallback_signal=None):
+    """
+    Compute Sample Entropy using a KD-Tree.
+    If the entropy is too high (i.e., signal is too noisy), it uses a fallback signal.
+    
+    Args:
+        signal (np.ndarray): 1D input signal.
+        m (int): Embedding dimension.
+        r (float): Tolerance (as a fraction of signal std).
+        max_entropy (float): Max allowed entropy before flagging as noisy.
+        fallback_signal (np.ndarray): Optional less noisy signal to replace if entropy is too high.
+
+    Returns:
+        float: Sample entropy.
+        np.ndarray: The signal used (original or fallback).
+    """
+    fallback_signal = np.zeros(len(signal))
+    signal = np.array(signal)
+    N = len(signal)
+    std = np.std(signal)
+    if std == 0:
+        return 0.0, signal  # Flat signal
+
+    # Form embedding vectors for m and m+1
+    def _embed(sig, dim):
+        return np.array([sig[i:i+dim] for i in range(N - dim + 1)])
+    
+    emb_m = _embed(signal, m)
+    emb_m1 = _embed(signal, m+1)
+
+    # Use KD-tree to count number of close neighbors
+    def _count_matches(emb, tolerance):
+        tree = KDTree(emb)
+        count = 0
+        for vec in emb:
+            neighbors = tree.query_ball_point(vec, tolerance)
+            count += len(neighbors) - 1  # exclude self-match
+        return count
+
+    tolerance = r * std
+    B = _count_matches(emb_m, tolerance)
+    A = _count_matches(emb_m1, tolerance)
+
+    # Avoid division by zero
+    if B == 0 or A == 0:
+        entropy = np.inf
+    else:
+        entropy = -np.log(A / B)
+    # Noise handling
+    if entropy > max_entropy and fallback_signal is not None:
+        print(f"[Warning] Signal entropy {entropy:.2f} exceeds max ({max_entropy}). Replacing with fallback.")
+        plt.figure(figsize=(8, 3))
+        plt.plot(signal, label=f"Noisy Signal (Entropy: {entropy:.2f})", color='red')
+        plt.title("Noisy Signal (Too High SampEn)")
+        plt.xlabel("Time")
+        plt.ylabel("Amplitude")
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+        return sampen_kdtree(fallback_signal, m, r, max_entropy)
+
+    return entropy, signal
+
+
+
+
 def lowPassFilter(order, cutoff, data):
     b, a = signal.butter(order, cutoff, fs=1000.0)
     z = signal.lfilter(b, a, data)

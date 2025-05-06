@@ -9,53 +9,58 @@ import time
 window_size = 150
 data_path = "test_set_diff"
 
-
+from filtering import sampen_kdtree
 from plotting_test import visualize_predictions, base_results_plot
 from file_reading import dataset_builder, preprocess_ecg_data, load_challenge_data
 
 # Define Fetal QRS Detector 
 class FetalQRSWindowDetector(nn.Module):
-    def __init__(self, in_channels=4, hidden_width=32, dropout_prob=0.4, kernel_size=9,filt_frequ=()):
+    def __init__(self, in_channels=4, hidden_width=32, dropout_prob=0.4, kernel_size=9, window_size=150, filt_frequ=(0.7, 75)):
         super(FetalQRSWindowDetector, self).__init__()
-                # Channel attention mechanism using 1x1 convolution
-        # self.channel_gate = nn.Sequential(
-        #     nn.Conv1d(in_channels, in_channels, kernel_size=1),
-        #     nn.Sigmoid()
-        # )
 
-        # Compute padding to maintain the same output size (optional)
+        self.window_size = window_size
         padding = kernel_size // 2
 
         self.conv1 = nn.Conv1d(in_channels, hidden_width, kernel_size=kernel_size, padding=padding)
         self.bn2 = nn.BatchNorm1d(hidden_width)
-        self.pool1 = nn.MaxPool1d(3)
-        self.dropout = nn.Dropout(dropout_prob)
+        self.pool1 = nn.MaxPool1d(2)
 
-        # You must define window_size somewhere accessible — either globally or as an argument
-        pooled_length = window_size // 3  # 150 // 50 = 3
-        self.fc = nn.Linear(hidden_width * pooled_length, window_size)
+        # Fix here: input to conv2 should match output from conv1
+        self.conv2 = nn.Conv1d(hidden_width, hidden_width/2, kernel_size=kernel_size, padding=padding)
+        self.pool2 = nn.MaxPool1d(2)
+
+        #self.dropout = nn.Dropout(dropout_prob)
+
+        # Two poolings with kernel size 3: total downscale factor = 3 * 3 = 9
+        pooled_length = window_size // 4
+
+        self.fc = nn.Linear(hidden_width/2 * pooled_length, window_size)
         self.fc2 = nn.Linear(window_size, window_size)
 
     def forward(self, x):
-        x = x.view(-1, 4, window_size)  # Reshape: [batch, channels, length]
-        # gates = self.channel_gate(x)              # Learn channel importance
-        # x = x * gates    
+        x = x.view(-1, 4, self.window_size)  # Assumes input always has [batch, 4, 150]
+
         x = torch.relu(self.bn2(self.conv1(x)))
         x = self.pool1(x)
-        x = self.dropout(x)
+
+        x = torch.relu(self.conv2(x))
+        x = self.pool2(x)
+
+        #x = self.dropout(x)
         x = x.view(x.size(0), -1)  # Flatten
+
         x = torch.sigmoid(self.fc(x))
         x = torch.sigmoid(self.fc2(x))
         return x
 # Load dataset
-def load_data(challenge = True):
+def load_data(challenge,lp=0.7,hp=75):
     window_length = window_size
     stride = 150
     # Simulate a batch of 4-channel windowed data: shape (batch, 4, 100)
     if challenge:
-        raw_ecg_data, fqrs = load_challenge_data(directory="test_set_filtered")
+        raw_ecg_data, fqrs = load_challenge_data(directory="test_set_filtered",lp=lp,hp=hp)
     else:
-        raw_ecg_data, fqrs = dataset_builder("./data", [2,9,15,28])
+        raw_ecg_data, fqrs = dataset_builder("/Users/bigey/Downloads/fetal-ecg-synthetic-database-1.0.0/fetal-ecg-synthetic-database-1.0.0", [2,9,15,28])
     print("lables :",len(fqrs)," ecg_data:  ", raw_ecg_data.shape)
 
     ecg_data, labels = preprocess_ecg_data(raw_ecg_data, fqrs, window_length, stride)
@@ -122,39 +127,44 @@ def train(dataloader, model, loss_fn, optimizer,batch_size):
             #print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
     return avg_loss/batches
 
-def test(dataloader, model, loss_fn, threshold=0.2):
+def test(dataloader, model, loss_fn, threshold=0.2, max_entropy=3, clean_signal=None):
     model.eval()
     total_loss = 0.0
     total_correct = 0
     total_samples = 0
     all_labels = []
     all_preds = []
-    
+
     with torch.no_grad():
         for X, y in dataloader:
+            # Noise filtering
+            # X_filtered = []
+            # for sample in X:
+            #     filtered_channels = []
+            #     for channel in sample:
+            #         entropy, filtered = sampen_kdtree(channel.cpu().numpy(), max_entropy=max_entropy, fallback_signal=clean_signal)
+            #         filtered_channels.append(torch.tensor(filtered))
+            #     X_filtered.append(torch.stack(filtered_channels))
+            # X = torch.stack(X_filtered).to(X.device)
+
             pred = model(X)
             loss = loss_fn(pred, y)
             total_loss += loss.item()
-            
-            # Apply threshold for binary classification
+
             pred_binary = (pred > threshold).float()
-            
-            # Collect predictions and labels for F1 score computation
+
             all_labels.append(y.detach().cpu().numpy())
             all_preds.append(pred_binary.detach().cpu().numpy())
-            
+
             total_correct += (pred_binary * y).sum().item()
             total_samples += y.sum().item()
 
     avg_loss = total_loss / len(dataloader)
     accuracy = total_correct / total_samples if total_samples > 0 else 0.0
+    f1 = f1_score(np.concatenate(all_labels).flatten(),
+                  np.concatenate(all_preds).flatten(),
+                  zero_division=0)
     
-    # Compute F1 score (flatten arrays)
-    all_labels = np.concatenate(all_labels).flatten()
-    all_preds = np.concatenate(all_preds).flatten()
-    f1 = f1_score(all_labels, all_preds, zero_division=0)
-    
-    #print(f"Test -- Accuracy: {accuracy*100:.2f}%, Avg Loss: {avg_loss:.6f}, F1 Score: {f1:.3f}")
     return avg_loss, accuracy, f1
 
 
@@ -176,9 +186,9 @@ def train_test_cycle(loaders, model, criterion=nn.BCELoss(), batch_size=64, thre
         # Step the scheduler based on test loss
         #scheduler.step(f1_score)  # Adjust the learning rate based on the test loss
 
-        # print(f"Epoch [{epoch + 1}/{epochs}] - " +
-        #       f"Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, " +
-        #       f"Accuracy: {accuracy * 100:.2f}%, F1: {f1_score:.3f}")
+        print(f"Epoch [{epoch + 1}/{epochs}] - " +
+              f"Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, " +
+              f"Accuracy: {accuracy * 100:.2f}%, F1: {f1_score:.3f}")
         
         progressive_test_loss.append(test_loss)
         progressive_loss.append(test_loss)
