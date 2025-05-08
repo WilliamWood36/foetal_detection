@@ -25,7 +25,6 @@ def remove_baseline_wander(signal, fs=1000, bcutoff=0.7, ucutoff=75, order=2):
 
     b, a = butter(order, [low, high], btype='band')  # Bandpass filter
     filtered = filtfilt(b, a, np.array(signal).reshape(1, -1)[0])
-
     return np.array(filtered).reshape(-1, 1)
 
 

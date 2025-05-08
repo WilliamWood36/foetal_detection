@@ -92,10 +92,10 @@ def clean_data():
         with open(file_name, "w") as outfile:
             outfile.writelines(lines)
 
-def preprocess_multi(data, scaler,Bscutoff = 1, notch = 50, fs = 250, downsample = True ):
+def preprocess_multi(data, scaler,Bscutoff = 1,Ucutoff=75, notch = 50, fs = 250, downsample = True ):
     filtered = [] 
     for w in data:
-        filtered.append(preprocess_single)
+        filtered.append(preprocess_single(w,scaler,Bscutoff,Ucutoff,notch,fs,downsample))
     return filtered
 
 def preprocess_single(data, scaler,Bscutoff = 10,Ucutoff=75, notch = 50, fs = 250, downsample = True ):
@@ -178,11 +178,11 @@ def dataset_builder(base_directory, signal_indexes, seperate=False):
         
         for w in waves:
             #print("adding wave: ",w)
-            print("w shape",np.array(waveforms["wave1"][signal_indexes]).shape)
-            dataset.append(preprocess_single(np.array((waveforms["wave1"][signal_indexes])),scaler, downsample=False))
+            #print("w shape",np.array(waveforms["wave1"][signal_indexes]).shape, ",",np.array((waveforms["wave1"][signal_indexes])).shape)
+            dataset.append(preprocess_multi(np.array((waveforms["wave1"][signal_indexes])),scaler, downsample=False))
             foetalDataset.append(waveforms["foetal_qrs"])
         
-    print(np.array(dataset).shape)
+    #print(np.array(dataset).shape)
     return np.array(dataset), foetalDataset
             
 

@@ -44,7 +44,7 @@ def surface_plot(x, y, z):
 
 def base_results_plot(num_epochs, training_loss, Test_loss, f1):
     epochs = list(range(0,num_epochs))
-    plt.plot(epochs, training_loss, label='Training Loss', color='red', marker='o')
+    plt.plot(epochs, training_loss, label='Training Loss', color='red', marker='o',)
     plt.plot(epochs,f1,label="F1",color='green',marker='o')
     # Accuracy plot
     plt.plot(epochs, Test_loss, label='Test_loss', color='blue', marker='o')
@@ -65,8 +65,8 @@ def visualize_predictions(outputs, signal, labels, num_samples=5):
     plt.plot(x, signal, label="Signal")
 
     # Plot a dot at the given index
-    plt.scatter(x, outputs, color="red", zorder=5, label=f"Dot at index ")
-    plt.scatter(x, (labels ), color="blue", zorder=5, label=f"Dot at index ")
+    plt.scatter(x, outputs, color="red", zorder=5, label=f"Predictions ", alpha=0.6)
+    plt.scatter(x, (labels ), color="blue", zorder=5, label=f"Labels",alpha=0.6)
     plt.xlabel("Index")
     plt.ylabel("Signal Value")
     plt.title("Signal with Dot at a Specific Index")

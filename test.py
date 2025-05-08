@@ -26,7 +26,7 @@ class FetalQRSWindowDetector(nn.Module):
         self.pool1 = nn.MaxPool1d(2)
 
         # Fix here: input to conv2 should match output from conv1
-        self.conv2 = nn.Conv1d(hidden_width, hidden_width/2, kernel_size=kernel_size, padding=padding)
+        self.conv2 = nn.Conv1d(hidden_width, int(hidden_width/2), kernel_size=kernel_size, padding=padding)
         self.pool2 = nn.MaxPool1d(2)
 
         #self.dropout = nn.Dropout(dropout_prob)
@@ -34,7 +34,7 @@ class FetalQRSWindowDetector(nn.Module):
         # Two poolings with kernel size 3: total downscale factor = 3 * 3 = 9
         pooled_length = window_size // 4
 
-        self.fc = nn.Linear(hidden_width/2 * pooled_length, window_size)
+        self.fc = nn.Linear(int(hidden_width/2 * pooled_length), window_size)
         self.fc2 = nn.Linear(window_size, window_size)
 
     def forward(self, x):
@@ -60,26 +60,33 @@ def load_data(challenge,lp=0.7,hp=75):
     if challenge:
         raw_ecg_data, fqrs = load_challenge_data(directory="test_set_filtered",lp=lp,hp=hp)
     else:
-        raw_ecg_data, fqrs = dataset_builder("/Users/bigey/Downloads/fetal-ecg-synthetic-database-1.0.0/fetal-ecg-synthetic-database-1.0.0", [2,9,15,28])
-    print("lables :",len(fqrs)," ecg_data:  ", raw_ecg_data.shape)
+        #raw_ecg_data, fqrs = dataset_builder("/Users/bigey/Downloads/fetal-ecg-synthetic-database-1.0.0/fetal-ecg-synthetic-database-1.0.0", [2,9,15,28])
+        raw_ecg_data, fqrs = dataset_builder("./data", [2,9,15,28])
+    #print("lables :",len(fqrs)," ecg_data:  ", raw_ecg_data.shape)
 
     ecg_data, labels = preprocess_ecg_data(raw_ecg_data, fqrs, window_length, stride)
-    print("lables :",labels.shape," ecg_data:  ", ecg_data.shape)
+    #print("lables :",labels.shape," ecg_data:  ", ecg_data.shape)
     pure_ecg = []
     bin_labels = []
-    for index,i in enumerate(ecg_data):
-        # Ensure we only take the first 4 channels if more exist
-        segment = i
+
+    sigma = 2.0                # Standard deviation of the Gaussian
+    window_radius = 10         # How many samples to include on either side
+    window_length = ecg_data.shape[2]  # Assuming ecg_data is shape (N, 4, 150)
+
+    for index, segment in enumerate(ecg_data):
         label = np.zeros(window_length)
-        if labels[index] != -1:
-            start = int(max(0, labels[index] - 3))
-            end = int(min(window_length, labels[index] + 2))
-            label[start:end] = 1.0
+
+        if labels[index] != -1 and labels[index] < window_length:
+            center = int(labels[index])
+            for offset in range(-window_radius, window_radius + 1):
+                pos = center + offset
+                if 0 <= pos < window_length:
+                    label[pos] = np.exp(-0.5 * (offset / sigma) ** 2)
 
         pure_ecg.append(segment)
         bin_labels.append(label)
 
-    print("lables :", np.array(bin_labels).shape," ecg_data:  ", np.array(pure_ecg).shape)
+    #print("lables :", np.array(bin_labels).shape," ecg_data:  ", np.array(pure_ecg).shape)
 
     pure_ecg = torch.from_numpy(np.array(pure_ecg, dtype=np.float32)).cuda()
     bin_labels = torch.from_numpy(np.array(bin_labels, dtype=np.float32)).cuda()
@@ -137,34 +144,29 @@ def test(dataloader, model, loss_fn, threshold=0.2, max_entropy=3, clean_signal=
 
     with torch.no_grad():
         for X, y in dataloader:
-            # Noise filtering
-            # X_filtered = []
-            # for sample in X:
-            #     filtered_channels = []
-            #     for channel in sample:
-            #         entropy, filtered = sampen_kdtree(channel.cpu().numpy(), max_entropy=max_entropy, fallback_signal=clean_signal)
-            #         filtered_channels.append(torch.tensor(filtered))
-            #     X_filtered.append(torch.stack(filtered_channels))
-            # X = torch.stack(X_filtered).to(X.device)
-
             pred = model(X)
             loss = loss_fn(pred, y)
             total_loss += loss.item()
 
             pred_binary = (pred > threshold).float()
 
+            # Store raw labels and predictions
             all_labels.append(y.detach().cpu().numpy())
             all_preds.append(pred_binary.detach().cpu().numpy())
 
-            total_correct += (pred_binary * y).sum().item()
-            total_samples += y.sum().item()
+            # Accuracy: sum of TP over total positives
+            total_correct += (pred_binary * (y > 0.5)).sum().item()
+            total_samples += (y > 0.5).sum().item()
 
     avg_loss = total_loss / len(dataloader)
+
+    # Flatten and binarize for classification metric
+    y_true = (np.concatenate(all_labels).flatten() > 0.5).astype(int)
+    y_pred = np.concatenate(all_preds).flatten()
+
+    f1 = f1_score(y_true, y_pred, zero_division=0)
     accuracy = total_correct / total_samples if total_samples > 0 else 0.0
-    f1 = f1_score(np.concatenate(all_labels).flatten(),
-                  np.concatenate(all_preds).flatten(),
-                  zero_division=0)
-    
+
     return avg_loss, accuracy, f1
 
 

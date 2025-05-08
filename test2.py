@@ -9,7 +9,7 @@ from fvcore.nn import FlopCountAnalysis
 
 
 batch_size = 64
-lr = 0.00005
+lr = 0.0005
 epochs = 200
 threashold = 0.3
 # Main execution
