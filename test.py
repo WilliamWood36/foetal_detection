@@ -188,9 +188,9 @@ def train_test_cycle(loaders, model, criterion=nn.BCELoss(), batch_size=64, thre
         # Step the scheduler based on test loss
         #scheduler.step(f1_score)  # Adjust the learning rate based on the test loss
 
-        print(f"Epoch [{epoch + 1}/{epochs}] - " +
-              f"Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, " +
-              f"Accuracy: {accuracy * 100:.2f}%, F1: {f1_score:.3f}")
+        # print(f"Epoch [{epoch + 1}/{epochs}] - " +
+        #       f"Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, " +
+        #       f"Accuracy: {accuracy * 100:.2f}%, F1: {f1_score:.3f}")
         
         progressive_test_loss.append(test_loss)
         progressive_loss.append(test_loss)

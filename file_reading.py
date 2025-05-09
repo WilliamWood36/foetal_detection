@@ -138,7 +138,7 @@ def load_challenge_data(directory = "test_set_filtered",channels=4, lp=0.7,hp=75
             temp.append(preprocess_single(np.array(data[data_titles[i]],dtype="float").reshape(-1,1),scaler,fs=250,Bscutoff=lp,Ucutoff=hp))
             
         dataset.append(temp)
-
+    print("Challenge Database loaded, Shape: ",np.array(dataset).shape)
     return np.array(dataset), lables
 
 
@@ -182,7 +182,6 @@ def dataset_builder(base_directory, signal_indexes, seperate=False):
             dataset.append(preprocess_multi(np.array((waveforms["wave1"][signal_indexes])),scaler, downsample=False))
             foetalDataset.append(waveforms["foetal_qrs"])
         
-    #print(np.array(dataset).shape)
     return np.array(dataset), foetalDataset
             
 

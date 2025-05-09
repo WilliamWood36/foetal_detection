@@ -1,0 +1,9 @@
+Train: train_challenge, Test: test_challenge, F1: 0.5694
+Train: train_synthetic, Test: test_challenge, F1: 0.0340
+Train: train_combined, Test: test_challenge, F1: 0.5838
+Train: train_challenge, Test: test_synthetic, F1: 0.1439
+Train: train_synthetic, Test: test_synthetic, F1: 0.8739
+Train: train_combined, Test: test_synthetic, F1: 0.8820
+Train: train_challenge, Test: test_combined, F1: 0.3136
+Train: train_synthetic, Test: test_combined, F1: 0.6113
+Train: train_combined, Test: test_combined, F1: 0.7717
