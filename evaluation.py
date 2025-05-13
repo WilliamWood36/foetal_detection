@@ -8,7 +8,7 @@ from plotting_test import basic_plot, visualize_predictions
 from scipy.signal import iirnotch, filtfilt, butter
 from test import FetalQRSWindowDetector, load_data, train_test_cycle
 from fvcore.nn import FlopCountAnalysis
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, precision_recall_fscore_support
 
 
 def initialise_model(file_loc = "best1.pt"):
@@ -63,11 +63,12 @@ def evaluate_model(model, test_loader, criterion, threshold=0.5, device="cpu", v
     all_labels_bin = (all_labels > 0.5).astype(int)
 
     # Compute metrics
-    f1 = f1_score(all_labels_bin, all_preds_bin, zero_division=0)
+    a,b,c,d = precision_recall_fscore_support(all_labels_bin, all_preds_bin, zero_division=0)
+    print("Precision ",a,"Recall ",b,"  F1",c, "Support ",d)
     acc = (all_preds_bin == all_labels_bin).mean()
 
-    print(f"✅ Evaluation - Test Loss: {total_loss:.4f}, Accuracy: {acc * 100:.2f}%, F1 Score: {f1:.4f}")
-    return f1, acc, total_loss
+    print(f"✅ Evaluation - Test Loss: {total_loss:.4f}, Accuracy: {acc * 100:.2f}%, F1 Score: {c[1]:.4f}")
+    return c[1], acc, total_loss
 # 4. Run evaluation
 
 
@@ -83,16 +84,17 @@ test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
 # 3. Evaluate on the test data
 criterion = nn.BCELoss()
-threshold = 0.3  # or your preferred threshold
+threshold = 0.7  # or your preferred threshold
 
-model = initialise_model()
+model = initialise_model()  
 
 evaluate_model(model, test_loader, criterion, threshold)
-
-train_dataset, test_dataset = load_data(challenge=False)
-
-# Create DataLoaders
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
-
+threshold = 0.5  # or your preferred threshold
 evaluate_model(model,test_loader,criterion,threshold)
+
+# train_dataset, test_dataset = load_data(challenge=False)
+
+# # Create DataLoaders
+# train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+# test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+

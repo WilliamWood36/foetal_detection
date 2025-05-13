@@ -24,8 +24,8 @@ def surface_plot(x, y, z):
     surf = ax.plot_surface(X, Y, Z, cmap='jet', edgecolor='k')
 
     # Labels
-    ax.set_xlabel('Learning Rate')
-    ax.set_ylabel('Classification Threshold')
+    ax.set_xlabel('Low-Pass Cutoff')
+    ax.set_ylabel('HighPass Cutoff')
     ax.set_zlabel('F1-measure')
 
     # Optional: reverse x-axis if needed
@@ -39,7 +39,38 @@ def surface_plot(x, y, z):
 
     plt.show()
 
+def base_results_plot_vari(num_epochs, training_losses, test_losses, f1_scores):
+    """
+    Plots mean ± std of training loss, test loss, and F1 over multiple runs.
 
+    Args:
+        num_epochs (int): Number of epochs per run.
+        training_losses (List[List[float]]): Each sublist is training loss over epochs for one run.
+        test_losses (List[List[float]]): Each sublist is test loss over epochs for one run.
+        f1_scores (List[List[float]]): Each sublist is F1 score over epochs for one run.
+    """
+    epochs = list(range(num_epochs))
+
+    def plot_with_std(data, label, color):
+        data = np.array(data)
+        mean = data.mean(axis=0)
+        std = data.std(axis=0)
+
+        plt.plot(epochs, mean, label=label, color=color, marker='o')
+        plt.fill_between(epochs, mean - std, mean + std, alpha=0.2, color=color)
+
+    plt.figure(figsize=(10, 6))
+    plot_with_std(training_losses, 'Training Loss', 'red')
+    plot_with_std(test_losses, 'Test Loss', 'blue')
+    plot_with_std(f1_scores, 'F1 Score', 'green')
+
+    plt.title('Training/Test Loss and F1 Score with Variance')
+    plt.xlabel('Epoch')
+    plt.ylabel('Metric Value')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 
 def base_results_plot(num_epochs, training_loss, Test_loss, f1):

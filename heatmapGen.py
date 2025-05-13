@@ -10,7 +10,7 @@ from fvcore.nn import FlopCountAnalysis
 
 
 batch_size = 64
-epochs = 60
+epochs = 1
 # Main execution
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -20,6 +20,7 @@ train_dataset, test_dataset = load_data(challenge=True)
 # Create DataLoaders
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+model = FetalQRSWindowDetector(in_channels=4).to(device)
 
 z = []
 x = []
@@ -27,40 +28,41 @@ y = []
 
 
 
-train_dataset, test_dataset = load_data(challenge=True)
+# train_dataset, test_dataset = load_data(challenge=True)
 
-# Create DataLoaders
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
-
-for hp in range(2,64,4):    #(1,50,3):
-    x.append(hp)
-
-    print(f"{hp}")
-
-
-    model = FetalQRSWindowDetector(in_channels=4,hidden_width=hp).to(device)
-    acc = train_test_cycle((train_loader,test_loader), model, batch_size=batch_size,lr=0.005,epochs=epochs,threshold=0.3)
-    y.append(acc)
-
-base_2(x,y)
-
+# # Create DataLoaders
+# train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+# test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
 # for hp in range(2,64,4):    #(1,50,3):
 #     x.append(hp)
-#     temp = []
-#     for lp in range(1,40,2):
-#         print(f"{hp},  {lp}")
-#         if len(x) == 1:
-#             y.append(lp/10)
-#         train_dataset, test_dataset = load_data(challenge=True,lp=lp/10,hp=hp)
 
-#         # Create DataLoaders
-#         test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+#     print(f"{hp}")
 
-#         criterion = nn.BCELoss()
-#         test_loss, accuracy, f1_score = test(test_loader, model, criterion, 0.3)
-#         temp.append(f1_score)
+
+#     model = FetalQRSWindowDetector(in_channels=4,hidden_width=hp).to(device)
+#     acc = train_test_cycle((train_loader,test_loader), model, batch_size=batch_size,lr=0.005,epochs=epochs,threshold=0.3)
+#     y.append(acc)
+
+# base_2(x,y)
+
+
+for hp in range(2,40,30):    #(1,50,3):
+    x.append(hp)
+    temp = []
+    for lp in range(1,20,10):
+        print(f"{hp},  {lp}")
+        if len(x) == 1:
+            y.append(lp/10)
+        train_dataset, test_dataset = load_data(challenge=True,lp=lp/10,hp=hp)
+
+        # Create DataLoaders
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+
+        criterion = nn.BCELoss()
+        test_loss, accuracy, f1_score = test(test_loader, model, criterion, 0.3)
+        temp.append(f1_score)
+    z.append(temp)
 
 
 
